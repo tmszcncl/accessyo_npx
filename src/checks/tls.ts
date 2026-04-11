@@ -31,7 +31,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
         ok: true,
         durationMs: Date.now() - start,
         protocol,
-        cipher: cipherInfo?.name,
+        cipher: cipherInfo.name,
         certIssuer,
         certValidTo,
         certExpired,
@@ -47,7 +47,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
 
 function parseCertIssuer(issuer: Record<string, string> | undefined): string | undefined {
   if (!issuer) return undefined;
-  return issuer['O'] ?? issuer['CN'] ?? undefined;
+  return issuer.O ?? issuer.CN;
 }
 
 function formatTlsError(err: Error): string {

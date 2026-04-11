@@ -5,7 +5,7 @@
 interface CdnRange {
   name: string;
   // CIDR: [network as 32-bit int, prefix length]
-  ranges: Array<[number, number]>;
+  ranges: [number, number][];
 }
 
 const CDN_RANGES: CdnRange[] = [

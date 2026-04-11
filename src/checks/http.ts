@@ -4,6 +4,7 @@ import type { HttpResult, IpCheckResult } from '../types.js';
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
+const ACCESSYO_UA = 'accessyo/0.1 (+https://github.com/tmszcncl/accessyo_npx)';
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const KEY_HEADERS = ['server', 'content-type', 'location', 'cf-ray', 'cf-cache-status', 'x-powered-by'];
@@ -27,17 +28,21 @@ export async function checkHttp(
   const [ipv4, ipv6, browserResult] = await Promise.all([
     bothFamilies ? quickCheck(url, { family: 4 }) : Promise.resolve(undefined),
     bothFamilies ? quickCheck(url, { family: 6 }) : Promise.resolve(undefined),
-    quickCheck(url, { userAgent: BROWSER_UA }),
+    followRedirects(url, [], Date.now(), BROWSER_UA),
   ]);
 
+  // Only flag as "differs" when the browser request gets a hard failure (4xx/5xx)
+  // while the plain request succeeded. 3xx chains that resolve to 200 are normal.
+  const browserFinalStatus = browserResult.statusCode ?? 0;
+  const mainFinalStatus = main.statusCode;
   const browserDiffers =
-    browserResult?.statusCode !== undefined && browserResult.statusCode !== main.statusCode;
+    browserFinalStatus >= 400 && mainFinalStatus < 400;
 
   return {
     ...main,
     ipv4,
     ipv6,
-    browserStatusCode: browserResult?.statusCode,
+    browserStatusCode: browserResult.statusCode,
     browserDiffers,
   };
 }
@@ -46,6 +51,7 @@ function followRedirects(
   url: string,
   chain: string[],
   start: number,
+  userAgent = ACCESSYO_UA,
 ): Promise<HttpResult> {
   return new Promise((resolve) => {
     if (chain.length > MAX_REDIRECTS) {
@@ -61,18 +67,21 @@ function followRedirects(
 
     const lib = url.startsWith('https') ? https : http;
 
-    const req = lib.request(url, { method: 'GET', timeout: TIMEOUT_MS }, (res) => {
+    const req = lib.request(
+      url,
+      { method: 'GET', timeout: TIMEOUT_MS, headers: { 'User-Agent': userAgent } },
+      (res) => {
       const { statusCode = 0, headers } = res;
 
       // consume body to free socket
       res.resume();
 
       const filteredHeaders = extractHeaders(headers);
-      const location = headers['location'];
+      const location = headers.location;
 
       if (statusCode >= 300 && statusCode < 400 && location) {
         const next = resolveRedirect(url, location);
-        void followRedirects(next, [...chain, url], start).then(resolve);
+        void followRedirects(next, [...chain, url], start, userAgent).then(resolve);
         return;
       }
 
@@ -124,17 +133,17 @@ function extractHeaders(raw: http.IncomingHttpHeaders): Record<string, string> {
   return result;
 }
 
-function resolveRedirect(base: string, location: string): string {
+export function resolveRedirect(base: string, location: string): string {
   if (location.startsWith('http')) return location;
   const origin = new URL(base).origin;
   return `${origin}${location}`;
 }
 
-function detectBlock(status: number, headers: Record<string, string>): string | undefined {
+export function detectBlock(status: number, headers: Record<string, string>): string | undefined {
   const isCloudflare =
     'cf-ray' in headers ||
     'cf-cache-status' in headers ||
-    headers['server']?.toLowerCase().includes('cloudflare');
+    headers.server?.toLowerCase().includes('cloudflare');
 
   if (isCloudflare && (status === 403 || status === 503)) return 'Cloudflare';
   return undefined;

@@ -15,6 +15,11 @@ export default tseslint.config(
     },
   },
   {
+    rules: {
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', 'jest.config.js', 'eslint.config.js'],
   }
 );
