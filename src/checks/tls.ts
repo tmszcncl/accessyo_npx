@@ -5,7 +5,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
   const start = Date.now();
 
   return new Promise((resolve) => {
-    const socket = tls.connect({ host, port, servername: host });
+    const socket = tls.connect({ host, port, servername: host, ALPNProtocols: ['h2', 'http/1.1'] });
 
     const timer = globalThis.setTimeout(() => {
       socket.destroy();
@@ -30,6 +30,8 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
           ? Math.floor((new Date(certValidTo).getTime() - Date.now()) / 86_400_000)
           : undefined;
 
+      const alpnProtocol = socket.alpnProtocol ?? undefined;
+
       socket.destroy();
       resolve({
         ok: true,
@@ -40,6 +42,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
         certValidTo,
         certExpired,
         certDaysRemaining,
+        alpnProtocol: typeof alpnProtocol === 'string' ? alpnProtocol : undefined,
       });
     });
 

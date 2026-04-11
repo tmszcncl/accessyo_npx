@@ -152,6 +152,11 @@ function printTls(result: TlsResult | null, hideTiming = false): void {
 
   if (result.protocol) console.log(`     ${chalk.dim('protocol:')} ${result.protocol}`);
   if (result.cipher) console.log(`     ${chalk.dim('cipher:')}   ${result.cipher}`);
+  if (result.alpnProtocol) {
+    const h2 = result.alpnProtocol === 'h2';
+    const label = h2 ? chalk.green('HTTP/2') : chalk.dim('HTTP/1.1');
+    console.log(`     ${chalk.dim('ALPN:')}    ${label}`);
+  }
 
   if (result.certIssuer ?? result.certValidTo) {
     console.log(`     ${chalk.dim('cert:')}`);

@@ -49,6 +49,7 @@ export interface TlsResult {
   certValidTo?: string;
   certExpired?: boolean;
   certDaysRemaining?: number;
+  alpnProtocol?: string;
   error?: string;
 }
 
