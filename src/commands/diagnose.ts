@@ -4,22 +4,30 @@ import { checkDns } from '../checks/dns.js';
 import { checkTcp } from '../checks/tcp.js';
 import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
+import { getNetworkContext } from '../checks/network-context.js';
 import { buildSummary } from '../summary.js';
-import type { DnsResult, TcpResult, TlsResult, HttpResult } from '../types.js';
+import type { DnsResult, TcpResult, TlsResult, HttpResult, NetworkContext } from '../types.js';
 
 export async function diagnose(host: string, port = 443): Promise<void> {
   console.log();
+
+  const spinner = ora('Detecting network...').start();
+  const ctx = await getNetworkContext();
+  spinner.stop();
+
+  printNetworkContext(ctx);
+
   console.log(`  ${chalk.bold(host)}`);
   console.log();
 
-  const spinner = ora('Running checks...').start();
+  const spinner2 = ora('Running checks...').start();
 
   const dns = await checkDns(host);
   const tcp = dns.ok ? await checkTcp(host, port) : null;
   const tls = tcp?.ok ? await checkTls(host, port) : null;
   const http = (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords) : null;
 
-  spinner.stop();
+  spinner2.stop();
 
   printDns(dns);
   console.log();
@@ -33,9 +41,30 @@ export async function diagnose(host: string, port = 443): Promise<void> {
   console.log();
 }
 
+function printNetworkContext(ctx: NetworkContext): void {
+  const line = chalk.dim('─'.repeat(40));
+  console.log(`  ${chalk.bold('Your network:')}`);
+  console.log();
+
+  const ip = ctx.publicIp ?? 'unknown';
+  const country = ctx.country ? chalk.dim(` (${ctx.country})`) : '';
+  console.log(`     ${chalk.dim('IP:')}    ${ip}${country}`);
+
+  const resolverLabel = ctx.resolverLabel ? chalk.dim(` (${ctx.resolverLabel})`) : '';
+  console.log(`     ${chalk.dim('DNS:')}   ${ctx.resolverIp}${resolverLabel}`);
+
+  const ipv6Text = ctx.ipv6Available
+    ? chalk.green('available') + chalk.dim(' (not tested)')
+    : chalk.dim('not available');
+  console.log(`     ${chalk.dim('IPv6:')}  ${ipv6Text}`);
+
+  console.log();
+  console.log(line);
+  console.log();
+}
+
 function printDns(result: DnsResult): void {
   const duration = chalk.dim(`${result.durationMs}ms`);
-  const resolver = chalk.dim(`resolver: ${result.resolver}`);
 
   if (!result.ok) {
     const code = result.errorCode ? ` (${result.errorCode})` : '';
@@ -50,7 +79,9 @@ function printDns(result: DnsResult): void {
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  DNS  ${duration}  ${resolver}`);
+  console.log(
+    `  ${chalk.green('✓')}  DNS  ${duration}  ${chalk.dim(`(resolver: ${result.resolver})`)}`,
+  );
 
   if (result.aRecords && result.aRecords.length > 0) {
     console.log(`     ${chalk.dim('A:')}    ${result.aRecords.join(', ')}`);
@@ -63,8 +94,10 @@ function printDns(result: DnsResult): void {
   if (!result.aRecords?.length && result.aaaaRecords?.length) {
     console.log(`     ${chalk.yellow('→')} IPv6 only — may fail on some networks`);
   } else {
-    const ttl = result.ttl !== undefined ? `  TTL: ${result.ttl}s` : '';
-    console.log(`     ${chalk.dim('→')} resolves correctly${ttl}`);
+    if (result.ttl !== undefined) {
+      console.log(`     ${chalk.dim('TTL:')}  ${result.ttl}s`);
+    }
+    console.log(`     ${chalk.dim('→')} resolves correctly`);
     if (result.cdn) {
       console.log(
         `     ${chalk.dim('→')} likely behind ${result.cdn} ${chalk.dim('(best-effort)')}`,
@@ -83,14 +116,14 @@ function printTcp(result: TcpResult | null, dnsFailed = false): void {
   const duration = chalk.dim(`${result.durationMs}ms`);
 
   if (!result.ok) {
-    console.log(`  ${chalk.red('✗')}  TCP  ${duration}  ${chalk.dim(`port ${result.port}`)}`);
+    console.log(`  ${chalk.red('✗')}  TCP  ${duration}  ${chalk.dim(`(port ${result.port})`)}`);
     console.log();
     console.log(`     ${chalk.red(result.error ?? 'Unknown error')}`);
     console.log(`     ${chalk.dim('→')} TLS skipped (TCP failed)`);
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  TCP  ${duration}  ${chalk.dim(`port ${result.port}`)}`);
+  console.log(`  ${chalk.green('✓')}  TCP  ${duration}  ${chalk.dim(`(port ${result.port})`)}`);
 }
 
 function printTls(result: TlsResult | null): void {
@@ -139,6 +172,22 @@ function printTls(result: TlsResult | null): void {
   }
 }
 
+function statusLabel(code: number): string {
+  if (code === 200) return 'OK';
+  if (code === 201) return 'Created';
+  if (code === 301) return 'Moved Permanently';
+  if (code === 302) return 'Found (Redirect)';
+  if (code === 400) return 'Bad Request';
+  if (code === 401) return 'Unauthorized';
+  if (code === 403) return 'Forbidden';
+  if (code === 404) return 'Not Found';
+  if (code === 429) return 'Too Many Requests';
+  if (code === 500) return 'Server Error';
+  if (code === 502) return 'Bad Gateway';
+  if (code === 503) return 'Service Unavailable';
+  return '';
+}
+
 function printHttp(result: HttpResult | null): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  HTTP  ${chalk.dim('skipped')}`);
@@ -164,15 +213,19 @@ function printHttp(result: HttpResult | null): void {
   console.log(`  ${chalk.green('✓')}  HTTP  ${duration}`);
 
   if (result.statusCode !== undefined) {
-    console.log(`     ${chalk.dim('status:')} ${result.statusCode}`);
+    console.log(
+      `     ${chalk.dim('status:')} ${result.statusCode} ${statusLabel(result.statusCode)}`,
+    );
   }
 
   if (result.redirects.length > 0) {
     console.log(`     ${chalk.dim('redirects:')}`);
     for (const url of result.redirects) {
-      console.log(`       ${chalk.dim(url)}`);
+      console.log(`       ${chalk.dim('→')} ${chalk.dim(url)}`);
     }
     console.log(`       ${chalk.dim('→')} final`);
+  } else {
+    console.log(`     ${chalk.dim('redirects:')} ${chalk.dim('(none)')}`);
   }
 
   const headerEntries = Object.entries(result.headers);
@@ -213,7 +266,7 @@ function printHttp(result: HttpResult | null): void {
   }
 
   if (result.cdn) {
-    console.log(`     ${chalk.dim('→')} served via ${result.cdn}`);
+    console.log(`     ${chalk.dim('→')} served via ${result.cdn} ${chalk.dim('(CDN)')}`);
   }
 
   if (result.ipv6 !== undefined && !result.ipv6.ok) {
