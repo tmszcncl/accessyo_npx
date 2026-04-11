@@ -22,10 +22,11 @@ export async function checkHttp(
   host: string,
   aRecords: string[] = [],
   aaaaRecords: string[] = [],
+  timeoutMs = TIMEOUT_MS,
 ): Promise<HttpResult> {
   const url = host.startsWith('http') ? host : `https://${host}`;
   const start = Date.now();
-  const main = await followRedirects(url, [], start);
+  const main = await followRedirects(url, [], start, ACCESSYO_UA, timeoutMs);
 
   // Skip secondary checks if no response was received (timeout / connection error)
   if (main.statusCode === undefined) {
@@ -36,12 +37,12 @@ export async function checkHttp(
 
   const [ipv4, ipv6, browserResult, wwwCheck] = await Promise.all([
     bothFamilies
-      ? quickCheck(url, { family: 4, userAgent: ACCESSYO_UA })
+      ? quickCheck(url, { family: 4, userAgent: ACCESSYO_UA, timeoutMs })
       : Promise.resolve(undefined),
     bothFamilies
-      ? quickCheck(url, { family: 6, userAgent: ACCESSYO_UA })
+      ? quickCheck(url, { family: 6, userAgent: ACCESSYO_UA, timeoutMs })
       : Promise.resolve(undefined),
-    followRedirects(url, [], Date.now(), BROWSER_UA),
+    followRedirects(url, [], Date.now(), BROWSER_UA, timeoutMs),
     checkWwwRedirect(host, main.redirects),
   ]);
 
@@ -110,6 +111,7 @@ function followRedirects(
   chain: string[],
   start: number,
   userAgent = ACCESSYO_UA,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<HttpResult> {
   return new Promise((resolve) => {
     if (chain.length > MAX_REDIRECTS) {
@@ -127,8 +129,9 @@ function followRedirects(
 
     const req = lib.request(
       url,
-      { method: 'GET', timeout: TIMEOUT_MS, headers: { 'User-Agent': userAgent } },
+      { method: 'GET', timeout: timeoutMs, headers: { 'User-Agent': userAgent } },
       (res) => {
+        const ttfb = Date.now() - start;
         const { statusCode = 0, headers } = res;
 
         // consume body to free socket
@@ -139,7 +142,7 @@ function followRedirects(
 
         if (statusCode >= 300 && statusCode < 400 && location) {
           const next = resolveRedirect(url, location);
-          void followRedirects(next, [...chain, url], start, userAgent).then(resolve);
+          void followRedirects(next, [...chain, url], start, userAgent, timeoutMs).then(resolve);
           return;
         }
 
@@ -149,6 +152,7 @@ function followRedirects(
         resolve({
           ok: statusCode >= 200 && statusCode < 500 && !blockedBy,
           durationMs: Date.now() - start,
+          ttfb: chain.length === 0 ? ttfb : undefined,
           statusCode,
           redirects: chain.length > 0 ? [...chain, url] : [],
           headers: filteredHeaders,
@@ -165,7 +169,7 @@ function followRedirects(
         durationMs: Date.now() - start,
         redirects: chain,
         headers: {},
-        error: `Timeout after ${TIMEOUT_MS}ms — server not responding`,
+        error: `Timeout after ${timeoutMs}ms — server not responding`,
       });
     });
 
@@ -220,9 +224,10 @@ export function detectBlock(status: number, headers: Record<string, string>): st
 
 function quickCheck(
   url: string,
-  options: { family?: 4 | 6; userAgent?: string },
+  options: { family?: 4 | 6; userAgent?: string; timeoutMs?: number },
 ): Promise<IpCheckResult> {
   const start = Date.now();
+  const ms = options.timeoutMs ?? TIMEOUT_MS;
   return new Promise((resolve) => {
     const lib = url.startsWith('https') ? https : http;
     const headers: Record<string, string> = {};
@@ -230,7 +235,7 @@ function quickCheck(
 
     const req = lib.request(
       url,
-      { method: 'GET', timeout: TIMEOUT_MS, family: options.family, headers },
+      { method: 'GET', timeout: ms, family: options.family, headers },
       (res) => {
         res.resume();
         const statusCode = res.statusCode ?? 0;

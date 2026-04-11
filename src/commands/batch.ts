@@ -5,6 +5,7 @@ import { checkTcp } from '../checks/tcp.js';
 import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
 import { diagnoseHost } from './diagnose.js';
+import { buildJsonOutput } from './json-output.js';
 
 interface BatchResult {
   host: string;
@@ -13,17 +14,17 @@ interface BatchResult {
   warnings: string[];
 }
 
-async function checkOne(host: string): Promise<BatchResult> {
-  const dns = await checkDns(host);
+async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
+  const dns = await checkDns(host, timeoutMs);
   if (!dns.ok) return { host, ok: false, failedAt: 'DNS', warnings: [] };
 
-  const tcp = await checkTcp(host, 443);
+  const tcp = await checkTcp(host, 443, timeoutMs);
   if (!tcp.ok) return { host, ok: false, failedAt: 'TCP', warnings: [] };
 
-  const tls = await checkTls(host, 443);
+  const tls = await checkTls(host, 443, timeoutMs);
   if (!tls.ok) return { host, ok: false, failedAt: 'TLS', warnings: [] };
 
-  const http = await checkHttp(host, dns.aRecords, dns.aaaaRecords);
+  const http = await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs);
   if (!http.ok) {
     const code = http.statusCode !== undefined ? ` ${http.statusCode}` : '';
     return { host, ok: false, failedAt: `HTTP${code}`, warnings: [] };
@@ -42,7 +43,7 @@ async function checkOne(host: string): Promise<BatchResult> {
     warnings.push(`cert ${tls.certDaysRemaining}d`);
   }
 
-  if (http.ipv6 !== undefined && !http.ipv6.ok) {
+  if (http.ipv6 !== undefined && !http.ipv6.ok && http.ipv6.error !== 'timeout') {
     warnings.push('IPv6');
   }
 
@@ -53,7 +54,23 @@ async function checkOne(host: string): Promise<BatchResult> {
   return { host, ok: true, warnings };
 }
 
-export async function batch(hosts: string[]): Promise<void> {
+export async function batch(hosts: string[], timeoutMs = 5000, json = false): Promise<void> {
+  if (json) {
+    const results = await Promise.all(
+      hosts.map(async (host) => {
+        const dns = await checkDns(host, timeoutMs);
+        const tcp = dns.ok ? await checkTcp(host, 443, timeoutMs) : null;
+        const tls = tcp?.ok ? await checkTls(host, 443, timeoutMs) : null;
+        const http =
+          (tls?.ok ?? tcp?.ok)
+            ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs)
+            : null;
+        return buildJsonOutput(host, dns, tcp, tls, http);
+      }),
+    );
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
   console.log();
 
   const maxLen = Math.max(...hosts.map((h) => h.length));
@@ -86,7 +103,7 @@ export async function batch(hosts: string[]): Promise<void> {
 
     results = await Promise.all(
       hosts.map(async (host, i) => {
-        const result = await checkOne(host);
+        const result = await checkOne(host, timeoutMs);
         updateRow(i, resultText(result));
         return result;
       }),
@@ -94,7 +111,7 @@ export async function batch(hosts: string[]): Promise<void> {
   } else {
     // Non-TTY (CI / pipes): single spinner, print table after all done
     const spinner = ora(`Checking ${hosts.length} domains...`).start();
-    results = await Promise.all(hosts.map((host) => checkOne(host)));
+    results = await Promise.all(hosts.map((host) => checkOne(host, timeoutMs)));
     spinner.stop();
 
     for (const [i, r] of results.entries()) {
@@ -130,7 +147,7 @@ export async function batch(hosts: string[]): Promise<void> {
       const groupHosts = group.map((r) => r.host);
       const [first] = group;
       if (first !== undefined) {
-        await diagnoseHost(first.host, 443, groupHosts);
+        await diagnoseHost(first.host, 443, groupHosts, timeoutMs);
       }
     }
   }

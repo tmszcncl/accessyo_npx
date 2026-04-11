@@ -35,22 +35,36 @@ Accessyo does.
 The CLI is in active development. Currently supports:
 
 - Network context (public IP, country, DNS resolver)
-- DNS resolution (A + AAAA records, TTL, resolver)
+- DNS resolution (A, AAAA, CNAME records, TTL, resolver)
 - TCP connectivity check
-- TLS handshake (protocol, cipher, certificate info + expiry, HTTP/2 via ALPN)
-- HTTP request (status, redirects, IPv4/IPv6, browser UA comparison, CDN detection, WAF blocking, www/non-www canonical check, HSTS validation)
-- Batch mode — check multiple domains at once
+- TLS handshake (protocol, cipher, certificate info + expiry, hostname match, HTTP/2 via ALPN)
+- HTTP request (status, TTFB, redirects, IPv4/IPv6, browser UA comparison, CDN detection, WAF blocking, www/non-www canonical check, HSTS validation)
+- Timings summary (per-check + total)
+- Root cause diagnosis with actionable suggestions
+- Batch mode — check multiple domains at once with per-domain warnings (HSTS, cert expiry, IPv6, slow response)
 
 **Single domain** (full detailed output):
 
 ```
-npx tsx src/cli.ts example.com
+npx accessyo example.com
 ```
 
 **Multiple domains** (compact summary + auto-details for failures):
 
 ```
-npx tsx src/cli.ts example.com api.example.com cdn.example.com
+npx accessyo example.com api.example.com cdn.example.com
+```
+
+**Options:**
+
+```
+--timeout <ms>   per-check timeout in milliseconds (default: 5000)
+--json           output results as JSON
+```
+
+```
+npx accessyo example.com --json
+npx accessyo example.com --timeout 3000
 ```
 
 ```

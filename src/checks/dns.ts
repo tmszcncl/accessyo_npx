@@ -7,13 +7,21 @@ export async function checkDns(host: string, timeoutMs = 5000): Promise<DnsResul
   const resolver = getResolver();
 
   try {
-    const [aResult, aaaaResult] = await withTimeout(
-      Promise.allSettled([dns.resolve4(host, { ttl: true }), dns.resolve6(host)]),
+    const [aResult, aaaaResult, cnameResult] = await withTimeout(
+      Promise.allSettled([
+        dns.resolve4(host, { ttl: true }),
+        dns.resolve6(host),
+        dns.resolveCname(host),
+      ]),
       timeoutMs,
     );
 
     const aRecords = aResult.status === 'fulfilled' ? aResult.value.map((r) => r.address) : [];
     const aaaaRecords = aaaaResult.status === 'fulfilled' ? aaaaResult.value : [];
+    const cname =
+      cnameResult.status === 'fulfilled' && cnameResult.value.length > 0
+        ? cnameResult.value[0]
+        : undefined;
     const ttl = aResult.status === 'fulfilled' ? aResult.value[0]?.ttl : undefined;
     const ok = aRecords.length > 0 || aaaaRecords.length > 0;
 
@@ -34,7 +42,16 @@ export async function checkDns(host: string, timeoutMs = 5000): Promise<DnsResul
     }
 
     const cdn = detectCdnFromIps([...aRecords, ...aaaaRecords]);
-    return { ok: true, durationMs: Date.now() - start, resolver, aRecords, aaaaRecords, ttl, cdn };
+    return {
+      ok: true,
+      durationMs: Date.now() - start,
+      resolver,
+      aRecords,
+      aaaaRecords,
+      cname,
+      ttl,
+      cdn,
+    };
   } catch (err) {
     return {
       ok: false,

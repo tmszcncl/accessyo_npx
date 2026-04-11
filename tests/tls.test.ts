@@ -150,4 +150,16 @@ describe('checkTls', () => {
       expect.objectContaining({ host: 'example.com', port: 8443 }),
     );
   });
+
+  it('sets hostnameMatch true on successful secureConnect', async () => {
+    const socket = makeMockSocket({});
+    connectSpy = jest.spyOn(tls, 'connect').mockReturnValue(socket);
+
+    const result = await checkTls('example.com');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.hostnameMatch).toBe(true);
+    }
+  });
 });

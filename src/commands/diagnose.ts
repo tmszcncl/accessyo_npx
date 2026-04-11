@@ -6,9 +6,25 @@ import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
 import { getNetworkContext } from '../checks/network-context.js';
 import { buildSummary } from '../summary.js';
+import { buildJsonOutput } from './json-output.js';
 import type { DnsResult, TcpResult, TlsResult, HttpResult, NetworkContext } from '../types.js';
 
-export async function diagnose(host: string, port = 443): Promise<void> {
+export async function diagnose(
+  host: string,
+  port = 443,
+  timeoutMs = 5000,
+  json = false,
+): Promise<void> {
+  if (json) {
+    const dns = await checkDns(host, timeoutMs);
+    const tcp = dns.ok ? await checkTcp(host, port, timeoutMs) : null;
+    const tls = tcp?.ok ? await checkTls(host, port, timeoutMs) : null;
+    const http =
+      (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs) : null;
+    console.log(JSON.stringify(buildJsonOutput(host, dns, tcp, tls, http), null, 2));
+    return;
+  }
+
   console.log();
 
   const spinner = ora('Detecting network...').start();
@@ -17,13 +33,14 @@ export async function diagnose(host: string, port = 443): Promise<void> {
 
   printNetworkContext(ctx);
 
-  await diagnoseHost(host, port);
+  await diagnoseHost(host, port, undefined, timeoutMs);
 }
 
 export async function diagnoseHost(
   host: string,
   port = 443,
   displayHosts?: string[],
+  timeoutMs = 5000,
 ): Promise<void> {
   const hideTiming = displayHosts !== undefined;
   let header: string;
@@ -39,10 +56,11 @@ export async function diagnoseHost(
 
   const spinner2 = ora('Running checks...').start();
 
-  const dns = await checkDns(host);
-  const tcp = dns.ok ? await checkTcp(host, port) : null;
-  const tls = tcp?.ok ? await checkTls(host, port) : null;
-  const http = (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords) : null;
+  const dns = await checkDns(host, timeoutMs);
+  const tcp = dns.ok ? await checkTcp(host, port, timeoutMs) : null;
+  const tls = tcp?.ok ? await checkTls(host, port, timeoutMs) : null;
+  const http =
+    (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs) : null;
 
   spinner2.stop();
 
@@ -101,6 +119,10 @@ function printDns(result: DnsResult, hideTiming = false): void {
 
   if (result.aaaaRecords && result.aaaaRecords.length > 0) {
     console.log(`     ${chalk.dim('AAAA:')} ${result.aaaaRecords.join(', ')}`);
+  }
+
+  if (result.cname) {
+    console.log(`     ${chalk.dim('CNAME:')} ${result.cname}`);
   }
 
   if (!result.aRecords?.length && result.aaaaRecords?.length) {
@@ -167,6 +189,10 @@ function printTls(result: TlsResult | null, hideTiming = false): void {
         : result.certValidTo;
       console.log(`       ${chalk.dim('valid to:')} ${expiry}`);
     }
+    if (result.hostnameMatch !== undefined) {
+      const label = result.hostnameMatch ? chalk.green('✓ OK') : chalk.red('✗ mismatch');
+      console.log(`       ${chalk.dim('hostname:')} ${label}`);
+    }
   }
 
   console.log(`     ${chalk.dim('→')} TLS handshake successful`);
@@ -230,6 +256,10 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
     );
   }
 
+  if (result.ttfb !== undefined) {
+    console.log(`     ${chalk.dim('TTFB:')}   ${result.ttfb}ms`);
+  }
+
   if (result.redirects.length > 0) {
     console.log(`     ${chalk.dim('redirects:')}`);
     for (const url of result.redirects.slice(1)) {
@@ -274,14 +304,24 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
   if (result.ipv4 !== undefined || result.ipv6 !== undefined) {
     console.log(`     ${chalk.dim('IP connectivity:')}`);
     if (result.ipv4 !== undefined) {
-      const icon = result.ipv4.ok ? chalk.green('✓') : chalk.red('✗');
-      const text = result.ipv4.ok ? chalk.green('OK') : chalk.red('FAIL');
+      const timedOut = !result.ipv4.ok && result.ipv4.error === 'timeout';
+      const icon = result.ipv4.ok ? chalk.green('✓') : timedOut ? chalk.dim('–') : chalk.red('✗');
+      const text = result.ipv4.ok
+        ? chalk.green('OK')
+        : timedOut
+          ? chalk.dim('timeout (CDN rate-limit?)')
+          : chalk.red('FAIL');
       const ms = chalk.dim(`(${result.ipv4.durationMs}ms)`);
       console.log(`       ${chalk.dim('IPv4:')} ${icon} ${text} ${ms}`);
     }
     if (result.ipv6 !== undefined) {
-      const icon = result.ipv6.ok ? chalk.green('✓') : chalk.red('✗');
-      const text = result.ipv6.ok ? chalk.green('OK') : chalk.red('FAIL');
+      const timedOut = !result.ipv6.ok && result.ipv6.error === 'timeout';
+      const icon = result.ipv6.ok ? chalk.green('✓') : timedOut ? chalk.dim('–') : chalk.red('✗');
+      const text = result.ipv6.ok
+        ? chalk.green('OK')
+        : timedOut
+          ? chalk.dim('timeout (CDN rate-limit?)')
+          : chalk.red('FAIL');
       const ms = chalk.dim(`(${result.ipv6.durationMs}ms)`);
       console.log(`       ${chalk.dim('IPv6:')} ${icon} ${text} ${ms}`);
     }
@@ -351,14 +391,32 @@ function printSummary(input: Parameters<typeof buildSummary>[0]): void {
 
   console.log(line);
   console.log();
-  row('DNS', input.dns.ok);
-  row('TCP', input.tcp === null ? null : input.tcp.ok);
-  row('TLS', input.tls === null ? null : input.tls.ok);
+  row('DNS', input.dns.ok, `${input.dns.durationMs}ms`);
+  row(
+    'TCP',
+    input.tcp === null ? null : input.tcp.ok,
+    input.tcp ? `${input.tcp.durationMs}ms` : '',
+  );
+  row(
+    'TLS',
+    input.tls === null ? null : input.tls.ok,
+    input.tls ? `${input.tls.durationMs}ms` : '',
+  );
   row(
     'HTTP',
     input.http === null ? null : input.http.ok,
-    input.http?.statusCode !== undefined ? String(input.http.statusCode) : undefined,
+    input.http
+      ? `${input.http.statusCode !== undefined ? `${input.http.statusCode}, ` : ''}${input.http.durationMs}ms`
+      : '',
   );
+
+  const total =
+    input.dns.durationMs +
+    (input.tcp?.durationMs ?? 0) +
+    (input.tls?.durationMs ?? 0) +
+    (input.http?.durationMs ?? 0);
+  console.log();
+  console.log(`  ${'Total'.padEnd(6)} ${chalk.dim(`${total}ms`)}`);
   console.log();
 
   if (s.allOk) {
@@ -369,8 +427,8 @@ function printSummary(input: Parameters<typeof buildSummary>[0]): void {
     console.log(`  ${chalk.red('STATUS:')} ${chalk.red('✗ NOT WORKING')}`);
     console.log();
     if (s.problem) {
-      console.log(`  ${chalk.bold('Problem:')}`);
-      console.log(`  ${chalk.dim('→')} ${s.problem}`);
+      console.log(`  ${chalk.bold.red('ROOT CAUSE:')}`);
+      console.log(`  ${chalk.red('→')} ${s.problem}`);
       console.log();
     }
     if (s.likelyCause) {

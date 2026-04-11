@@ -27,6 +27,7 @@ export interface HstsInfo {
 export interface HttpResult {
   ok: boolean;
   durationMs: number;
+  ttfb?: number;
   statusCode?: number;
   redirects: string[];
   headers: Record<string, string>;
@@ -58,6 +59,7 @@ export interface TlsResult {
   certExpired?: boolean;
   certDaysRemaining?: number;
   alpnProtocol?: string;
+  hostnameMatch?: boolean;
   error?: string;
 }
 
@@ -67,6 +69,7 @@ export interface DnsResult {
   resolver: string;
   aRecords?: string[];
   aaaaRecords?: string[];
+  cname?: string;
   ttl?: number;
   cdn?: string;
   error?: string;

@@ -32,6 +32,9 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
 
       const alpnProtocol = socket.alpnProtocol ?? undefined;
 
+      // checkServerIdentity throws if hostname doesn't match — if we reach secureConnect, it matched
+      const hostnameMatch = true;
+
       socket.destroy();
       resolve({
         ok: true,
@@ -43,6 +46,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
         certExpired,
         certDaysRemaining,
         alpnProtocol: typeof alpnProtocol === 'string' ? alpnProtocol : undefined,
+        hostnameMatch,
       });
     });
 
