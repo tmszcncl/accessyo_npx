@@ -37,6 +37,15 @@ describe('buildSummary', () => {
     expect(result.likelyCause).toMatch(/DNS/i);
   });
 
+  it('diagnoses DNS failure when tcp is null (skipped)', () => {
+    const dns: DnsResult = { ok: false, durationMs: 5, resolver: 'system', error: 'NXDOMAIN', errorCode: 'NXDOMAIN' };
+    const result = buildSummary({ dns, tcp: null, tls: null, http: null });
+    expect(result.allOk).toBe(false);
+    expect(result.problem).toMatch(/cannot be resolved/i);
+    expect(result.likelyCause).toMatch(/DNS/i);
+    expect(result.whatYouCanDo.length).toBeGreaterThan(0);
+  });
+
   it('diagnoses TCP failure', () => {
     const tcp: TcpResult = { ok: false, durationMs: 5, port: 443, error: 'ECONNREFUSED' };
     const result = buildSummary({ dns: okDns, tcp, tls: null, http: null });

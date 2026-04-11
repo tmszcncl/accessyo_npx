@@ -2,7 +2,7 @@ import type { DnsResult, TcpResult, TlsResult, HttpResult } from './types.js';
 
 export interface SummaryInput {
   dns: DnsResult;
-  tcp: TcpResult;
+  tcp: TcpResult | null;
   tls: TlsResult | null;
   http: HttpResult | null;
 }
@@ -17,7 +17,7 @@ export interface SummaryResult {
 export function buildSummary(input: SummaryInput): SummaryResult {
   const { dns, tcp, tls, http } = input;
 
-  if (!dns.ok) {
+  if (!dns.ok || tcp === null) {
     return {
       allOk: false,
       problem: 'Domain cannot be resolved',

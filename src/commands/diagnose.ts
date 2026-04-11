@@ -14,15 +14,16 @@ export async function diagnose(host: string, port = 443): Promise<void> {
 
   const spinner = ora('Running checks...').start();
 
-  const [dns, tcp] = await Promise.all([checkDns(host), checkTcp(host, port)]);
-  const tls = tcp.ok ? await checkTls(host, port) : null;
-  const http = tls?.ok ?? tcp.ok ? await checkHttp(host) : null;
+  const dns = await checkDns(host);
+  const tcp = dns.ok ? await checkTcp(host, port) : null;
+  const tls = tcp?.ok ? await checkTls(host, port) : null;
+  const http = (tls?.ok ?? tcp?.ok) ? await checkHttp(host) : null;
 
   spinner.stop();
 
   printDns(dns);
   console.log();
-  printTcp(tcp);
+  printTcp(tcp, !dns.ok);
   console.log();
   printTls(tls);
   console.log();
@@ -70,7 +71,13 @@ function printDns(result: DnsResult): void {
   }
 }
 
-function printTcp(result: TcpResult): void {
+function printTcp(result: TcpResult | null, dnsFailed = false): void {
+  if (result === null) {
+    const reason = dnsFailed ? chalk.dim(' (DNS failed)') : '';
+    console.log(`  ${chalk.dim('–')}  TCP  ${chalk.dim('skipped')}${reason}`);
+    return;
+  }
+
   const duration = chalk.dim(`${result.durationMs}ms`);
 
   if (!result.ok) {
@@ -184,7 +191,7 @@ function printSummary(input: Parameters<typeof buildSummary>[0]): void {
   console.log(line);
   console.log();
   row('DNS', input.dns.ok);
-  row('TCP', input.tcp.ok);
+  row('TCP', input.tcp === null ? null : input.tcp.ok);
   row('TLS', input.tls === null ? null : input.tls.ok);
   row(
     'HTTP',
