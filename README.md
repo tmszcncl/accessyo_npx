@@ -5,7 +5,7 @@
 [![CI](https://github.com/tmszcncl/accessyo_npx/actions/workflows/ci.yml/badge.svg)](https://github.com/tmszcncl/accessyo_npx/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Work in progress. Not yet published to npm.
+> Published on npm: https://www.npmjs.com/package/accessyo
 
 🌐 [accessyo.com](https://accessyo.com)
 
