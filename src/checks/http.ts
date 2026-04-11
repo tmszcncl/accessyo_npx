@@ -34,8 +34,12 @@ export async function checkHttp(
   const bothFamilies = aRecords.length > 0 && aaaaRecords.length > 0;
 
   const [ipv4, ipv6, browserResult, wwwCheck] = await Promise.all([
-    bothFamilies ? quickCheck(url, { family: 4 }) : Promise.resolve(undefined),
-    bothFamilies ? quickCheck(url, { family: 6 }) : Promise.resolve(undefined),
+    bothFamilies
+      ? quickCheck(url, { family: 4, userAgent: ACCESSYO_UA })
+      : Promise.resolve(undefined),
+    bothFamilies
+      ? quickCheck(url, { family: 6, userAgent: ACCESSYO_UA })
+      : Promise.resolve(undefined),
     followRedirects(url, [], Date.now(), BROWSER_UA),
     checkWwwRedirect(host, main.redirects),
   ]);
@@ -225,7 +229,8 @@ function quickCheck(
         res.resume();
         const statusCode = res.statusCode ?? 0;
         resolve({
-          ok: statusCode >= 200 && statusCode < 400,
+          // A response (even 4xx) means IP-level connectivity is working
+          ok: statusCode > 0 && statusCode < 500,
           statusCode,
           durationMs: Date.now() - start,
         });
