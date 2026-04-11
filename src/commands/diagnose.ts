@@ -245,6 +245,16 @@ function statusLabel(code: number): string {
   return '';
 }
 
+function redirectStepLabel(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    const path = `${parsed.pathname}${parsed.search}`;
+    return `${parsed.protocol}//${parsed.host}${path}`;
+  } catch {
+    return rawUrl;
+  }
+}
+
 function printHttp(result: HttpResult | null, hideTiming = false): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  HTTP  ${chalk.dim('skipped')}`);
@@ -281,9 +291,9 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
 
   if (result.redirects.length > 0) {
     console.log(`     ${chalk.dim('redirects:')}`);
-    for (const url of result.redirects.slice(1)) {
-      console.log(`       ${chalk.dim('→')} ${chalk.dim(url)}`);
-    }
+    const labels = result.redirects.map(redirectStepLabel);
+    const chain = labels.join(chalk.dim(' -> '));
+    console.log(`       ${chalk.dim('chain:')} ${chain}`);
   } else {
     console.log(`     ${chalk.dim('(no redirects)')}`);
   }
