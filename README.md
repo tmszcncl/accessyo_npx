@@ -39,10 +39,38 @@ The CLI is in active development. Currently supports:
 - TCP connectivity check
 - TLS handshake (protocol, cipher, certificate info + expiry)
 - HTTP request (status, redirects, IPv4/IPv6, browser UA comparison, CDN detection, WAF blocking)
+- Batch mode — check multiple domains at once
+
+**Single domain** (full detailed output):
 
 ```
 npx tsx src/cli.ts example.com
 ```
+
+**Multiple domains** (compact summary + auto-details for failures):
+
+```
+npx tsx src/cli.ts example.com api.example.com cdn.example.com
+```
+
+```
+  example.com        ✓ WORKING
+  api.example.com    ✗ NOT WORKING (TLS)
+  cdn.example.com    ✓ WORKING
+
+────────────────────────────────────────
+
+  1 working, 2 failing
+
+  api.example.com
+
+  ✗  TLS
+
+     certificate has expired
+  ...
+```
+
+Domains failing with the same error are grouped into a single debug block.
 
 Not yet published to npm. Follow the repo to stay updated.
 

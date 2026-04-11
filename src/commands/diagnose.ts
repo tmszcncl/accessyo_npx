@@ -17,7 +17,24 @@ export async function diagnose(host: string, port = 443): Promise<void> {
 
   printNetworkContext(ctx);
 
-  console.log(`  ${chalk.bold(host)}`);
+  await diagnoseHost(host, port);
+}
+
+export async function diagnoseHost(
+  host: string,
+  port = 443,
+  displayHosts?: string[],
+): Promise<void> {
+  const hideTiming = displayHosts !== undefined;
+  let header: string;
+  if (!displayHosts) {
+    header = host;
+  } else if (displayHosts.length <= 3) {
+    header = displayHosts.join(', ');
+  } else {
+    header = displayHosts.slice(0, 3).join(', ') + chalk.dim(` (+${displayHosts.length - 3} more)`);
+  }
+  console.log(`  ${chalk.bold(header)}`);
   console.log();
 
   const spinner2 = ora('Running checks...').start();
@@ -29,13 +46,13 @@ export async function diagnose(host: string, port = 443): Promise<void> {
 
   spinner2.stop();
 
-  printDns(dns);
+  printDns(dns, hideTiming);
   console.log();
-  printTcp(tcp, !dns.ok);
+  printTcp(tcp, !dns.ok, hideTiming);
   console.log();
-  printTls(tls);
+  printTls(tls, hideTiming);
   console.log();
-  printHttp(http);
+  printHttp(http, hideTiming);
   console.log();
   printSummary({ dns, tcp, tls, http });
   console.log();
@@ -58,12 +75,12 @@ function printNetworkContext(ctx: NetworkContext): void {
   console.log();
 }
 
-function printDns(result: DnsResult): void {
-  const duration = chalk.dim(`${result.durationMs}ms`);
+function printDns(result: DnsResult, hideTiming = false): void {
+  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
     const code = result.errorCode ? ` (${result.errorCode})` : '';
-    console.log(`  ${chalk.red('✗')}  DNS${code}  ${duration}`);
+    console.log(`  ${chalk.red('✗')}  DNS${code}${duration}`);
     console.log();
     console.log(`     ${chalk.red(result.error ?? 'Unknown error')}`);
     if (result.errorCode === 'TIMEOUT') {
@@ -75,7 +92,7 @@ function printDns(result: DnsResult): void {
   }
 
   console.log(
-    `  ${chalk.green('✓')}  DNS  ${duration}  ${chalk.dim(`(resolver: ${result.resolver})`)}`,
+    `  ${chalk.green('✓')}  DNS${duration}  ${chalk.dim(`(resolver: ${result.resolver})`)}`,
   );
 
   if (result.aRecords && result.aRecords.length > 0) {
@@ -96,42 +113,42 @@ function printDns(result: DnsResult): void {
   }
 }
 
-function printTcp(result: TcpResult | null, dnsFailed = false): void {
+function printTcp(result: TcpResult | null, dnsFailed = false, hideTiming = false): void {
   if (result === null) {
     const reason = dnsFailed ? chalk.dim(' (DNS failed)') : '';
     console.log(`  ${chalk.dim('–')}  TCP  ${chalk.dim('skipped')}${reason}`);
     return;
   }
 
-  const duration = chalk.dim(`${result.durationMs}ms`);
+  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
-    console.log(`  ${chalk.red('✗')}  TCP  ${duration}  ${chalk.dim(`(port ${result.port})`)}`);
+    console.log(`  ${chalk.red('✗')}  TCP${duration}  ${chalk.dim(`(port ${result.port})`)}`);
     console.log();
     console.log(`     ${chalk.red(result.error ?? 'Unknown error')}`);
     console.log(`     ${chalk.dim('→')} TLS skipped (TCP failed)`);
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  TCP  ${duration}  ${chalk.dim(`(port ${result.port})`)}`);
+  console.log(`  ${chalk.green('✓')}  TCP${duration}  ${chalk.dim(`(port ${result.port})}`)}`);
 }
 
-function printTls(result: TlsResult | null): void {
+function printTls(result: TlsResult | null, hideTiming = false): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  TLS  ${chalk.dim('skipped')}`);
     return;
   }
 
-  const duration = chalk.dim(`${result.durationMs}ms`);
+  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
-    console.log(`  ${chalk.red('✗')}  TLS  ${duration}`);
+    console.log(`  ${chalk.red('✗')}  TLS${duration}`);
     console.log();
     console.log(`     ${chalk.red(result.error ?? 'Unknown error')}`);
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  TLS  ${duration}`);
+  console.log(`  ${chalk.green('✓')}  TLS${duration}`);
 
   if (result.protocol) console.log(`     ${chalk.dim('protocol:')} ${result.protocol}`);
   if (result.cipher) console.log(`     ${chalk.dim('cipher:')}   ${result.cipher}`);
@@ -178,17 +195,17 @@ function statusLabel(code: number): string {
   return '';
 }
 
-function printHttp(result: HttpResult | null): void {
+function printHttp(result: HttpResult | null, hideTiming = false): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  HTTP  ${chalk.dim('skipped')}`);
     return;
   }
 
-  const duration = chalk.dim(`${result.durationMs}ms`);
+  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
     const block = result.blockedBy ? ` (${result.blockedBy})` : '';
-    console.log(`  ${chalk.red('✗')}  HTTP${block}  ${duration}`);
+    console.log(`  ${chalk.red('✗')}  HTTP${block}${duration}`);
     console.log();
     if (result.blockedBy === 'Cloudflare') {
       console.log(`     ${chalk.red('Request blocked by Cloudflare / WAF')}`);
@@ -200,7 +217,7 @@ function printHttp(result: HttpResult | null): void {
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  HTTP  ${duration}`);
+  console.log(`  ${chalk.green('✓')}  HTTP${duration}`);
 
   if (result.statusCode !== undefined) {
     console.log(

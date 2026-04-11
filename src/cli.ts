@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 import { program } from 'commander';
 import { diagnose } from './commands/diagnose.js';
+import { batch } from './commands/batch.js';
 
 program
   .name('accessyo')
   .description('See why your users cannot connect')
-  .argument('<host>', 'host to diagnose')
-  .action(async (host: string) => {
-    await diagnose(host);
+  .argument('<host...>', 'one or more hosts to diagnose')
+  .action(async (hosts: string[]) => {
+    if (hosts.length === 1) {
+      await diagnose(hosts[0]);
+    } else {
+      await batch(hosts);
+    }
   });
 
 program
