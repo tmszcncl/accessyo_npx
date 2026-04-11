@@ -99,7 +99,7 @@ function followRedirects(
           ok: statusCode >= 200 && statusCode < 500 && !blockedBy,
           durationMs: Date.now() - start,
           statusCode,
-          redirects: chain,
+          redirects: chain.length > 0 ? [...chain, url] : [],
           headers: filteredHeaders,
           blockedBy,
           cdn,
@@ -171,6 +171,7 @@ function quickCheck(
   url: string,
   options: { family?: 4 | 6; userAgent?: string },
 ): Promise<IpCheckResult> {
+  const start = Date.now();
   return new Promise((resolve) => {
     const lib = url.startsWith('https') ? https : http;
     const headers: Record<string, string> = {};
@@ -182,17 +183,21 @@ function quickCheck(
       (res) => {
         res.resume();
         const statusCode = res.statusCode ?? 0;
-        resolve({ ok: statusCode >= 200 && statusCode < 400, statusCode });
+        resolve({
+          ok: statusCode >= 200 && statusCode < 400,
+          statusCode,
+          durationMs: Date.now() - start,
+        });
       },
     );
 
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'timeout' });
+      resolve({ ok: false, durationMs: Date.now() - start, error: 'timeout' });
     });
 
     req.on('error', (err) => {
-      resolve({ ok: false, error: err.message });
+      resolve({ ok: false, durationMs: Date.now() - start, error: err.message });
     });
 
     req.end();

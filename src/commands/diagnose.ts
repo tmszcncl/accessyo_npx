@@ -53,11 +53,6 @@ function printNetworkContext(ctx: NetworkContext): void {
   const resolverLabel = ctx.resolverLabel ? chalk.dim(` (${ctx.resolverLabel})`) : '';
   console.log(`     ${chalk.dim('DNS:')}   ${ctx.resolverIp}${resolverLabel}`);
 
-  const ipv6Text = ctx.ipv6Available
-    ? chalk.green('available') + chalk.dim(' (not tested)')
-    : chalk.dim('not available');
-  console.log(`     ${chalk.dim('IPv6:')}  ${ipv6Text}`);
-
   console.log();
   console.log(line);
   console.log();
@@ -98,11 +93,6 @@ function printDns(result: DnsResult): void {
       console.log(`     ${chalk.dim('TTL:')}  ${result.ttl}s`);
     }
     console.log(`     ${chalk.dim('→')} resolves correctly`);
-    if (result.cdn) {
-      console.log(
-        `     ${chalk.dim('→')} likely behind ${result.cdn} ${chalk.dim('(best-effort)')}`,
-      );
-    }
   }
 }
 
@@ -220,12 +210,11 @@ function printHttp(result: HttpResult | null): void {
 
   if (result.redirects.length > 0) {
     console.log(`     ${chalk.dim('redirects:')}`);
-    for (const url of result.redirects) {
+    for (const url of result.redirects.slice(1)) {
       console.log(`       ${chalk.dim('→')} ${chalk.dim(url)}`);
     }
-    console.log(`       ${chalk.dim('→')} final`);
   } else {
-    console.log(`     ${chalk.dim('redirects:')} ${chalk.dim('(none)')}`);
+    console.log(`     ${chalk.dim('(no redirects)')}`);
   }
 
   const headerEntries = Object.entries(result.headers);
@@ -237,16 +226,18 @@ function printHttp(result: HttpResult | null): void {
   }
 
   if (result.ipv4 !== undefined || result.ipv6 !== undefined) {
-    console.log(`     ${chalk.dim('connectivity:')}`);
+    console.log(`     ${chalk.dim('IP connectivity:')}`);
     if (result.ipv4 !== undefined) {
       const icon = result.ipv4.ok ? chalk.green('✓') : chalk.red('✗');
       const text = result.ipv4.ok ? chalk.green('OK') : chalk.red('FAIL');
-      console.log(`       ${chalk.dim('IPv4:')} ${icon} ${text}`);
+      const ms = chalk.dim(`(${result.ipv4.durationMs}ms)`);
+      console.log(`       ${chalk.dim('IPv4:')} ${icon} ${text} ${ms}`);
     }
     if (result.ipv6 !== undefined) {
       const icon = result.ipv6.ok ? chalk.green('✓') : chalk.red('✗');
       const text = result.ipv6.ok ? chalk.green('OK') : chalk.red('FAIL');
-      console.log(`       ${chalk.dim('IPv6:')} ${icon} ${text}`);
+      const ms = chalk.dim(`(${result.ipv6.durationMs}ms)`);
+      console.log(`       ${chalk.dim('IPv6:')} ${icon} ${text} ${ms}`);
     }
   }
 
@@ -266,11 +257,13 @@ function printHttp(result: HttpResult | null): void {
   }
 
   if (result.cdn) {
-    console.log(`     ${chalk.dim('→')} served via ${result.cdn} ${chalk.dim('(CDN)')}`);
+    console.log(`     ${chalk.dim('→')} served via ${result.cdn} ${chalk.dim('(CDN edge)')}`);
   }
 
-  if (result.ipv6 !== undefined && !result.ipv6.ok) {
-    console.log(`     ${chalk.yellow('→')} IPv6 connectivity issue`);
+  if (result.ipv4?.ok && result.ipv6?.ok) {
+    console.log(`     ${chalk.dim('→')} both IPv4 and IPv6 working`);
+  } else if (result.ipv4?.ok && result.ipv6 !== undefined && !result.ipv6.ok) {
+    console.log(`     ${chalk.yellow('→')} IPv6 connectivity issue (may affect some users)`);
   }
 
   if (result.browserDiffers === true) {

@@ -13,7 +13,7 @@ const KNOWN_RESOLVERS: Record<string, string> = {
 };
 
 export async function getNetworkContext(): Promise<NetworkContext> {
-  const [ipResult, ipv6Available] = await Promise.all([fetchPublicIpAndCountry(), checkIpv6()]);
+  const ipResult = await fetchPublicIpAndCountry();
 
   const resolverIp = getResolver();
   const resolverLabel = KNOWN_RESOLVERS[resolverIp];
@@ -23,7 +23,6 @@ export async function getNetworkContext(): Promise<NetworkContext> {
     country: ipResult?.country,
     resolverIp,
     resolverLabel,
-    ipv6Available,
   };
 }
 
@@ -66,22 +65,6 @@ function fetchPublicIpAndCountry(): Promise<
       resolve(undefined);
     });
   });
-}
-
-async function checkIpv6(): Promise<boolean> {
-  try {
-    const result = await Promise.race([
-      dns.resolve6('ipv6.google.com'),
-      new Promise<never>((_, reject) =>
-        globalThis.setTimeout(() => {
-          reject(new Error('timeout'));
-        }, 2000),
-      ),
-    ]);
-    return Array.isArray(result) && result.length > 0;
-  } catch {
-    return false;
-  }
 }
 
 function getResolver(): string {

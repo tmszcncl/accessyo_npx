@@ -3,12 +3,12 @@ export interface NetworkContext {
   country: string | undefined;
   resolverIp: string;
   resolverLabel: string | undefined;
-  ipv6Available: boolean;
 }
 
 export interface IpCheckResult {
   ok: boolean;
   statusCode?: number;
+  durationMs: number;
   error?: string;
 }
 
