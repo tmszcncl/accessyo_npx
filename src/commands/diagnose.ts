@@ -4,6 +4,7 @@ import { checkDns } from '../checks/dns.js';
 import { checkTcp } from '../checks/tcp.js';
 import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
+import { buildSummary } from '../summary.js';
 import type { DnsResult, TcpResult, TlsResult, HttpResult } from '../types.js';
 
 export async function diagnose(host: string, port = 443): Promise<void> {
@@ -26,6 +27,8 @@ export async function diagnose(host: string, port = 443): Promise<void> {
   printTls(tls);
   console.log();
   printHttp(http);
+  console.log();
+  printSummary({ dns, tcp, tls, http });
   console.log();
 }
 
@@ -165,4 +168,56 @@ function printHttp(result: HttpResult | null): void {
   } else if (status >= 500) {
     console.log(`     ${chalk.red('→')} server error`);
   }
+}
+
+function printSummary(input: Parameters<typeof buildSummary>[0]): void {
+  const s = buildSummary(input);
+  const line = chalk.dim('─'.repeat(40));
+
+  const row = (label: string, ok: boolean | null, extra = '') => {
+    const icon = ok === null ? chalk.dim('–') : ok ? chalk.green('✓') : chalk.red('✗');
+    const text = ok === null ? chalk.dim('skipped') : ok ? chalk.green('OK') : chalk.red('FAIL');
+    const suffix = extra ? chalk.dim(` (${extra})`) : '';
+    console.log(`  ${label.padEnd(6)} ${icon} ${text}${suffix}`);
+  };
+
+  console.log(line);
+  console.log();
+  row('DNS', input.dns.ok);
+  row('TCP', input.tcp.ok);
+  row('TLS', input.tls === null ? null : input.tls.ok);
+  row(
+    'HTTP',
+    input.http === null ? null : input.http.ok,
+    input.http?.statusCode !== undefined ? String(input.http.statusCode) : undefined,
+  );
+  console.log();
+
+  if (s.allOk) {
+    console.log(`  ${chalk.green('STATUS:')} ${chalk.green('✓ WORKING')}`);
+    console.log();
+    console.log(`  ${chalk.dim('→')} all checks passed`);
+  } else {
+    console.log(`  ${chalk.red('STATUS:')} ${chalk.red('✗ NOT WORKING')}`);
+    console.log();
+    if (s.problem) {
+      console.log(`  ${chalk.bold('Problem:')}`);
+      console.log(`  ${chalk.dim('→')} ${s.problem}`);
+      console.log();
+    }
+    if (s.likelyCause) {
+      console.log(`  ${chalk.bold('Likely cause:')}`);
+      console.log(`  ${chalk.dim('→')} ${s.likelyCause}`);
+      console.log();
+    }
+    if (s.whatYouCanDo.length > 0) {
+      console.log(`  ${chalk.bold('What you can do:')}`);
+      for (const tip of s.whatYouCanDo) {
+        console.log(`  ${chalk.dim('→')} ${tip}`);
+      }
+    }
+  }
+
+  console.log();
+  console.log(line);
 }
