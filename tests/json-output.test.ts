@@ -7,6 +7,10 @@ const baseDns: DnsResult = {
   resolver: '8.8.8.8',
   aRecords: ['1.2.3.4'],
   aaaaRecords: [],
+  resolverComparison: {
+    publicIps: ['1.2.3.4'],
+    splitHorizon: false,
+  },
   ttl: 300,
 };
 

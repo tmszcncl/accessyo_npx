@@ -47,6 +47,10 @@ async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
     warnings.push('IPv6');
   }
 
+  if (dns.resolverComparison?.splitHorizon) {
+    warnings.push('split-horizon');
+  }
+
   if (http.durationMs > 2000) {
     warnings.push(`slow ${http.durationMs}ms`);
   }

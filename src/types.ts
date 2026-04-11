@@ -63,6 +63,13 @@ export interface TlsResult {
   error?: string;
 }
 
+export interface ResolverComparison {
+  /** IPs returned by 1.1.1.1 (Cloudflare) */
+  publicIps: string[];
+  /** true when system resolver returns private IPs while 1.1.1.1 returns public IPs */
+  splitHorizon: boolean;
+}
+
 export interface DnsResult {
   ok: boolean;
   durationMs: number;
@@ -72,6 +79,7 @@ export interface DnsResult {
   cname?: string;
   ttl?: number;
   cdn?: string;
+  resolverComparison?: ResolverComparison;
   error?: string;
   errorCode?: string;
 }

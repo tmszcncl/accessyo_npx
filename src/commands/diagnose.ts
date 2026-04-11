@@ -125,6 +125,20 @@ function printDns(result: DnsResult, hideTiming = false): void {
     console.log(`     ${chalk.dim('CNAME:')} ${result.cname}`);
   }
 
+  if (result.resolverComparison) {
+    const { publicIps, splitHorizon } = result.resolverComparison;
+    const sameIps =
+      publicIps.length === (result.aRecords?.length ?? 0) &&
+      publicIps.every((ip) => result.aRecords?.includes(ip));
+    if (!sameIps) {
+      const ipsText = publicIps.length > 0 ? publicIps.join(', ') : chalk.dim('(no response)');
+      console.log(`     ${chalk.dim('1.1.1.1:')} ${ipsText}`);
+    }
+    if (splitHorizon) {
+      console.log(`     ${chalk.yellow('→')} ${chalk.yellow('split-horizon DNS detected (system DNS returns private IP)')}`);
+    }
+  }
+
   if (!result.aRecords?.length && result.aaaaRecords?.length) {
     console.log(`     ${chalk.yellow('→')} IPv6 only — may fail on some networks`);
   } else {

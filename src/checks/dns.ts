@@ -1,6 +1,6 @@
 import dns from 'node:dns/promises';
 import { detectCdnFromIps } from './cdn.js';
-import type { DnsResult } from '../types.js';
+import type { DnsResult, ResolverComparison } from '../types.js';
 
 export async function checkDns(host: string, timeoutMs = 5000): Promise<DnsResult> {
   const start = Date.now();
@@ -42,6 +42,7 @@ export async function checkDns(host: string, timeoutMs = 5000): Promise<DnsResul
     }
 
     const cdn = detectCdnFromIps([...aRecords, ...aaaaRecords]);
+    const resolverComparison = await queryPublicResolver(host, aRecords, timeoutMs);
     return {
       ok: true,
       durationMs: Date.now() - start,
@@ -51,6 +52,7 @@ export async function checkDns(host: string, timeoutMs = 5000): Promise<DnsResul
       cname,
       ttl,
       cdn,
+      resolverComparison,
     };
   } catch (err) {
     return {
@@ -100,4 +102,31 @@ function getDnsErrorCode(err: unknown): string | undefined {
   if (err.message.includes('timed out')) return 'TIMEOUT';
   if (err.message.includes('ENODATA')) return 'ENODATA';
   return undefined;
+}
+
+async function queryPublicResolver(
+  host: string,
+  systemIps: string[],
+  timeoutMs: number,
+): Promise<ResolverComparison | undefined> {
+  try {
+    const cfResolver = new dns.Resolver();
+    cfResolver.setServers(['1.1.1.1']);
+    const publicIps = await withTimeout(cfResolver.resolve4(host), Math.min(timeoutMs, 3000));
+    const systemHasPrivate = systemIps.some(isPrivateIp);
+    const publicHasPrivate = publicIps.some(isPrivateIp);
+    const splitHorizon = systemHasPrivate && !publicHasPrivate && publicIps.length > 0;
+    return { publicIps, splitHorizon };
+  } catch {
+    return undefined;
+  }
+}
+
+export function isPrivateIp(ip: string): boolean {
+  return (
+    ip.startsWith('10.') ||
+    ip.startsWith('127.') ||
+    ip.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+  );
 }
