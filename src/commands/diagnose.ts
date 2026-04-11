@@ -66,7 +66,9 @@ function printDns(result: DnsResult): void {
     const ttl = result.ttl !== undefined ? `  TTL: ${result.ttl}s` : '';
     console.log(`     ${chalk.dim('→')} resolves correctly${ttl}`);
     if (result.cdn) {
-      console.log(`     ${chalk.dim('→')} likely behind ${result.cdn} ${chalk.dim('(best-effort)')}`);
+      console.log(
+        `     ${chalk.dim('→')} likely behind ${result.cdn} ${chalk.dim('(best-effort)')}`,
+      );
     }
   }
 }
@@ -201,7 +203,9 @@ function printHttp(result: HttpResult | null): void {
   }
 
   if (result.browserDiffers === true) {
-    console.log(`     ${chalk.yellow('→')} server responds differently to browsers (status: ${result.browserStatusCode ?? '?'} vs ${status})`);
+    console.log(
+      `     ${chalk.yellow('→')} server responds differently to browsers (status: ${result.browserStatusCode ?? '?'} vs ${status})`,
+    );
   }
 
   if (result.durationMs > 2000) {

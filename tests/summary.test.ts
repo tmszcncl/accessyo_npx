@@ -30,7 +30,13 @@ describe('buildSummary', () => {
   });
 
   it('diagnoses DNS failure', () => {
-    const dns: DnsResult = { ok: false, durationMs: 5, resolver: 'system', error: 'NXDOMAIN', errorCode: 'NXDOMAIN' };
+    const dns: DnsResult = {
+      ok: false,
+      durationMs: 5,
+      resolver: 'system',
+      error: 'NXDOMAIN',
+      errorCode: 'NXDOMAIN',
+    };
     const result = buildSummary({ dns, tcp: okTcp, tls: okTls, http: okHttp });
     expect(result.allOk).toBe(false);
     expect(result.problem).toMatch(/cannot be resolved/i);
@@ -38,7 +44,13 @@ describe('buildSummary', () => {
   });
 
   it('diagnoses DNS failure when tcp is null (skipped)', () => {
-    const dns: DnsResult = { ok: false, durationMs: 5, resolver: 'system', error: 'NXDOMAIN', errorCode: 'NXDOMAIN' };
+    const dns: DnsResult = {
+      ok: false,
+      durationMs: 5,
+      resolver: 'system',
+      error: 'NXDOMAIN',
+      errorCode: 'NXDOMAIN',
+    };
     const result = buildSummary({ dns, tcp: null, tls: null, http: null });
     expect(result.allOk).toBe(false);
     expect(result.problem).toMatch(/cannot be resolved/i);
@@ -61,7 +73,13 @@ describe('buildSummary', () => {
   });
 
   it('diagnoses HTTP 403 as blocked', () => {
-    const http: HttpResult = { ok: false, durationMs: 5, statusCode: 403, redirects: [], headers: {} };
+    const http: HttpResult = {
+      ok: false,
+      durationMs: 5,
+      statusCode: 403,
+      redirects: [],
+      headers: {},
+    };
     const result = buildSummary({ dns: okDns, tcp: okTcp, tls: okTls, http });
     expect(result.allOk).toBe(false);
     expect(result.problem).toMatch(/blocked/i);
@@ -69,13 +87,25 @@ describe('buildSummary', () => {
   });
 
   it('diagnoses HTTP 404', () => {
-    const http: HttpResult = { ok: false, durationMs: 5, statusCode: 404, redirects: [], headers: {} };
+    const http: HttpResult = {
+      ok: false,
+      durationMs: 5,
+      statusCode: 404,
+      redirects: [],
+      headers: {},
+    };
     const result = buildSummary({ dns: okDns, tcp: okTcp, tls: okTls, http });
     expect(result.problem).toMatch(/not found/i);
   });
 
   it('diagnoses HTTP 500 as server error', () => {
-    const http: HttpResult = { ok: false, durationMs: 5, statusCode: 500, redirects: [], headers: {} };
+    const http: HttpResult = {
+      ok: false,
+      durationMs: 5,
+      statusCode: 500,
+      redirects: [],
+      headers: {},
+    };
     const result = buildSummary({ dns: okDns, tcp: okTcp, tls: okTls, http });
     expect(result.problem).toMatch(/server error/i);
   });

@@ -31,7 +31,8 @@ export function checkTcp(host: string, port = 443, timeoutMs = 5000): Promise<Tc
 }
 
 function formatTcpError(err: Error): string {
-  if (err.message.includes('ECONNREFUSED')) return 'Connection refused — port closed or firewall blocking';
+  if (err.message.includes('ECONNREFUSED'))
+    return 'Connection refused — port closed or firewall blocking';
   if (err.message.includes('EHOSTUNREACH')) return 'Host unreachable';
   if (err.message.includes('ENETUNREACH')) return 'Network unreachable';
   if (err.message.includes('ETIMEDOUT')) return 'Connection timed out';

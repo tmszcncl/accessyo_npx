@@ -47,4 +47,3 @@ export interface DnsResult {
   error?: string;
   errorCode?: string;
 }
-

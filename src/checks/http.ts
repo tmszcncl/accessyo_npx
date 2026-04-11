@@ -5,9 +5,17 @@ import type { HttpResult, IpCheckResult } from '../types.js';
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
 const ACCESSYO_UA = 'accessyo/0.1 (+https://github.com/tmszcncl/accessyo_npx)';
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-const KEY_HEADERS = ['server', 'content-type', 'location', 'cf-ray', 'cf-cache-status', 'x-powered-by'];
+const KEY_HEADERS = [
+  'server',
+  'content-type',
+  'location',
+  'cf-ray',
+  'cf-cache-status',
+  'x-powered-by',
+];
 
 export async function checkHttp(
   host: string,
@@ -35,8 +43,7 @@ export async function checkHttp(
   // while the plain request succeeded. 3xx chains that resolve to 200 are normal.
   const browserFinalStatus = browserResult.statusCode ?? 0;
   const mainFinalStatus = main.statusCode;
-  const browserDiffers =
-    browserFinalStatus >= 400 && mainFinalStatus < 400;
+  const browserDiffers = browserFinalStatus >= 400 && mainFinalStatus < 400;
 
   return {
     ...main,
@@ -71,31 +78,32 @@ function followRedirects(
       url,
       { method: 'GET', timeout: TIMEOUT_MS, headers: { 'User-Agent': userAgent } },
       (res) => {
-      const { statusCode = 0, headers } = res;
+        const { statusCode = 0, headers } = res;
 
-      // consume body to free socket
-      res.resume();
+        // consume body to free socket
+        res.resume();
 
-      const filteredHeaders = extractHeaders(headers);
-      const location = headers.location;
+        const filteredHeaders = extractHeaders(headers);
+        const location = headers.location;
 
-      if (statusCode >= 300 && statusCode < 400 && location) {
-        const next = resolveRedirect(url, location);
-        void followRedirects(next, [...chain, url], start, userAgent).then(resolve);
-        return;
-      }
+        if (statusCode >= 300 && statusCode < 400 && location) {
+          const next = resolveRedirect(url, location);
+          void followRedirects(next, [...chain, url], start, userAgent).then(resolve);
+          return;
+        }
 
-      const blockedBy = detectBlock(statusCode, filteredHeaders);
+        const blockedBy = detectBlock(statusCode, filteredHeaders);
 
-      resolve({
-        ok: statusCode >= 200 && statusCode < 500 && !blockedBy,
-        durationMs: Date.now() - start,
-        statusCode,
-        redirects: chain,
-        headers: filteredHeaders,
-        blockedBy,
-      });
-    });
+        resolve({
+          ok: statusCode >= 200 && statusCode < 500 && !blockedBy,
+          durationMs: Date.now() - start,
+          statusCode,
+          redirects: chain,
+          headers: filteredHeaders,
+          blockedBy,
+        });
+      },
+    );
 
     req.on('timeout', () => {
       req.destroy();
@@ -182,7 +190,8 @@ function quickCheck(
 }
 
 function formatHttpError(err: Error): string {
-  if (err.message.includes('ECONNRESET')) return 'Connection reset — possible firewall or backend issue';
+  if (err.message.includes('ECONNRESET'))
+    return 'Connection reset — possible firewall or backend issue';
   if (err.message.includes('ECONNREFUSED')) return 'Connection refused';
   if (err.message.includes('ENOTFOUND')) return 'Host not found';
   if (err.message.includes('certificate')) return 'TLS/certificate error';

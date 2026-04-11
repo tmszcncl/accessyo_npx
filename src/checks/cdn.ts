@@ -58,7 +58,5 @@ function inRange(ip: number, network: number, prefix: number): boolean {
 }
 
 function ipToInt(ip: string): number {
-  return ip
-    .split('.')
-    .reduce((acc, octet) => (acc << 8) | parseInt(octet, 10), 0) >>> 0;
+  return ip.split('.').reduce((acc, octet) => (acc << 8) | parseInt(octet, 10), 0) >>> 0;
 }

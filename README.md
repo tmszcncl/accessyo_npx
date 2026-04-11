@@ -13,7 +13,7 @@
 
 ## What is Accessyo?
 
-Accessyo is a network debugging CLI that shows *why* your users can't connect — not just that something is down.
+Accessyo is a network debugging CLI that shows _why_ your users can't connect — not just that something is down.
 
 > "Your server is fine. Your users still fail."
 
