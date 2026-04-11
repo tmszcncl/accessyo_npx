@@ -12,6 +12,11 @@ export interface IpCheckResult {
   error?: string;
 }
 
+export interface WwwCheckResult {
+  /** 'www→apex' | 'apex→www' | 'both-ok' | 'www-unreachable' | 'skipped' */
+  kind: 'www→apex' | 'apex→www' | 'both-ok' | 'www-unreachable' | 'skipped';
+}
+
 export interface HttpResult {
   ok: boolean;
   durationMs: number;
@@ -25,6 +30,7 @@ export interface HttpResult {
   ipv6?: IpCheckResult;
   browserStatusCode?: number;
   browserDiffers?: boolean;
+  wwwCheck?: WwwCheckResult;
 }
 
 export interface TcpResult {

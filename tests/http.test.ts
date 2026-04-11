@@ -1,4 +1,4 @@
-import { detectCdn, detectBlock, resolveRedirect } from '../src/checks/http.js';
+import { detectCdn, detectBlock, resolveRedirect, checkWwwRedirect } from '../src/checks/http.js';
 
 describe('detectCdn', () => {
   it('detects Cloudflare via cf-ray header', () => {
@@ -57,5 +57,33 @@ describe('resolveRedirect', () => {
 
   it('resolves relative path against base origin', () => {
     expect(resolveRedirect('https://example.com/old', '/new')).toBe('https://example.com/new');
+  });
+});
+
+describe('checkWwwRedirect', () => {
+  it('detects apex→www redirect from chain', async () => {
+    const result = await checkWwwRedirect('example.com', [
+      'https://example.com',
+      'https://www.example.com/',
+    ]);
+    expect(result.kind).toBe('apex→www');
+  });
+
+  it('detects www→apex redirect from chain', async () => {
+    const result = await checkWwwRedirect('www.example.com', [
+      'https://www.example.com',
+      'https://example.com/',
+    ]);
+    expect(result.kind).toBe('www→apex');
+  });
+
+  it('returns skipped for plain subdomain (not www)', async () => {
+    const result = await checkWwwRedirect('api.example.com', []);
+    expect(result.kind).toBe('skipped');
+  });
+
+  it('returns skipped for localhost', async () => {
+    const result = await checkWwwRedirect('localhost', []);
+    expect(result.kind).toBe('skipped');
   });
 });

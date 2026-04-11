@@ -292,6 +292,21 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
   if (result.durationMs > 2000) {
     console.log(`     ${chalk.yellow('→')} slow response (${result.durationMs}ms)`);
   }
+
+  if (result.wwwCheck) {
+    const { kind } = result.wwwCheck;
+    if (kind === 'apex→www') {
+      console.log(`     ${chalk.dim('→')} redirects to www (canonical: www)`);
+    } else if (kind === 'www→apex') {
+      console.log(`     ${chalk.dim('→')} redirects to apex (canonical: non-www)`);
+    } else if (kind === 'both-ok') {
+      console.log(
+        `     ${chalk.yellow('→')} www and non-www both serve content (no canonical redirect)`,
+      );
+    } else if (kind === 'www-unreachable') {
+      console.log(`     ${chalk.yellow('→')} www version unreachable — only one variant works`);
+    }
+  }
 }
 
 function printSummary(input: Parameters<typeof buildSummary>[0]): void {

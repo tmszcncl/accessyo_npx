@@ -1,6 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
-import type { HttpResult, IpCheckResult } from '../types.js';
+import type { HttpResult, IpCheckResult, WwwCheckResult } from '../types.js';
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
@@ -33,10 +33,11 @@ export async function checkHttp(
 
   const bothFamilies = aRecords.length > 0 && aaaaRecords.length > 0;
 
-  const [ipv4, ipv6, browserResult] = await Promise.all([
+  const [ipv4, ipv6, browserResult, wwwCheck] = await Promise.all([
     bothFamilies ? quickCheck(url, { family: 4 }) : Promise.resolve(undefined),
     bothFamilies ? quickCheck(url, { family: 6 }) : Promise.resolve(undefined),
     followRedirects(url, [], Date.now(), BROWSER_UA),
+    checkWwwRedirect(host, main.redirects),
   ]);
 
   // Only flag as "differs" when the browser request gets a hard failure (4xx/5xx)
@@ -51,7 +52,47 @@ export async function checkHttp(
     ipv6,
     browserStatusCode: browserResult.statusCode,
     browserDiffers,
+    wwwCheck,
   };
+}
+
+export async function checkWwwRedirect(host: string, redirects: string[]): Promise<WwwCheckResult> {
+  // Strip protocol if present, get bare hostname
+  const bare = host.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+  const isWww = bare.startsWith('www.');
+  const withoutWww = isWww ? bare.slice(4) : bare;
+
+  // Only applies to apex domains (exactly 2 labels like "example.com")
+  // Subdomains (api.example.com) and single labels (localhost) are skipped
+  const apexParts = withoutWww.split('.');
+  if (apexParts.length !== 2) {
+    return { kind: 'skipped' };
+  }
+
+  const apex = withoutWww;
+  const www = `www.${withoutWww}`;
+
+  // Check whether the redirect chain visits the counterpart
+  const chain = redirects.map((u) => u.replace(/^https?:\/\//, '').replace(/\/.*$/, ''));
+
+  if (!isWww) {
+    if (chain.some((h) => h === www || h.startsWith(www + '/'))) {
+      return { kind: 'apex→www' };
+    }
+  } else {
+    if (chain.some((h) => h === apex || h.startsWith(apex + '/'))) {
+      return { kind: 'www→apex' };
+    }
+  }
+
+  // No redirect observed — probe the counterpart
+  const counterpart = `https://${isWww ? apex : www}`;
+  const probe = await quickCheck(counterpart, {});
+  if (!probe.ok) {
+    return { kind: 'www-unreachable' };
+  }
+  return { kind: 'both-ok' };
 }
 
 function followRedirects(
