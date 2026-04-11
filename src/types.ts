@@ -17,6 +17,13 @@ export interface WwwCheckResult {
   kind: 'www→apex' | 'apex→www' | 'both-ok' | 'www-unreachable' | 'skipped';
 }
 
+export interface HstsInfo {
+  raw: string;
+  maxAge: number;
+  includeSubDomains: boolean;
+  preload: boolean;
+}
+
 export interface HttpResult {
   ok: boolean;
   durationMs: number;
@@ -31,6 +38,7 @@ export interface HttpResult {
   browserStatusCode?: number;
   browserDiffers?: boolean;
   wwwCheck?: WwwCheckResult;
+  hsts?: HstsInfo;
 }
 
 export interface TcpResult {

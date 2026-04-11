@@ -10,25 +10,47 @@ interface BatchResult {
   host: string;
   ok: boolean;
   failedAt?: string;
+  warnings: string[];
 }
 
 async function checkOne(host: string): Promise<BatchResult> {
   const dns = await checkDns(host);
-  if (!dns.ok) return { host, ok: false, failedAt: 'DNS' };
+  if (!dns.ok) return { host, ok: false, failedAt: 'DNS', warnings: [] };
 
   const tcp = await checkTcp(host, 443);
-  if (!tcp.ok) return { host, ok: false, failedAt: 'TCP' };
+  if (!tcp.ok) return { host, ok: false, failedAt: 'TCP', warnings: [] };
 
   const tls = await checkTls(host, 443);
-  if (!tls.ok) return { host, ok: false, failedAt: 'TLS' };
+  if (!tls.ok) return { host, ok: false, failedAt: 'TLS', warnings: [] };
 
   const http = await checkHttp(host, dns.aRecords, dns.aaaaRecords);
   if (!http.ok) {
     const code = http.statusCode !== undefined ? ` ${http.statusCode}` : '';
-    return { host, ok: false, failedAt: `HTTP${code}` };
+    return { host, ok: false, failedAt: `HTTP${code}`, warnings: [] };
   }
 
-  return { host, ok: true };
+  const warnings: string[] = [];
+
+  if (!http.hsts) {
+    warnings.push('HSTS');
+  } else if (http.hsts.maxAge < 180 * 86400) {
+    const days = Math.floor(http.hsts.maxAge / 86400);
+    warnings.push(`HSTS short (${days}d)`);
+  }
+
+  if (tls.certDaysRemaining !== undefined && tls.certDaysRemaining < 30) {
+    warnings.push(`cert ${tls.certDaysRemaining}d`);
+  }
+
+  if (http.ipv6 !== undefined && !http.ipv6.ok) {
+    warnings.push('IPv6');
+  }
+
+  if (http.durationMs > 2000) {
+    warnings.push(`slow ${http.durationMs}ms`);
+  }
+
+  return { host, ok: true, warnings };
 }
 
 export async function batch(hosts: string[]): Promise<void> {
@@ -38,10 +60,14 @@ export async function batch(hosts: string[]): Promise<void> {
   // isTTY is undefined in non-TTY environments (pipes, CI)
   const isTTY = (process.stdout as { isTTY?: boolean }).isTTY === true;
 
-  const resultText = (r: BatchResult): string =>
-    r.ok
+  const resultText = (r: BatchResult): string => {
+    const status = r.ok
       ? chalk.green('✓ WORKING')
       : chalk.red('✗ NOT WORKING') + (r.failedAt ? chalk.dim(` (${r.failedAt})`) : '');
+    const warns =
+      r.warnings.length > 0 ? '  ' + r.warnings.map((w) => chalk.yellow(`⚠ ${w}`)).join(' ') : '';
+    return status + warns;
+  };
 
   let results: BatchResult[];
 
@@ -54,9 +80,8 @@ export async function batch(hosts: string[]): Promise<void> {
     // Update a specific row in-place using ANSI cursor movement
     const updateRow = (index: number, text: string): void => {
       const up = hosts.length - index;
-      process.stdout.write(
-        `\x1b[${up}A\r\x1b[2K  ${hosts[index].padEnd(maxLen + 3)}${text}\x1b[${up}B\r`,
-      );
+      const label = hosts.at(index) ?? '';
+      process.stdout.write(`\x1b[${up}A\r\x1b[2K  ${label.padEnd(maxLen + 3)}${text}\x1b[${up}B\r`);
     };
 
     results = await Promise.all(
@@ -72,8 +97,9 @@ export async function batch(hosts: string[]): Promise<void> {
     results = await Promise.all(hosts.map((host) => checkOne(host)));
     spinner.stop();
 
-    for (let i = 0; i < results.length; i++) {
-      console.log(`  ${hosts[i].padEnd(maxLen + 3)}${resultText(results[i])}`);
+    for (const [i, r] of results.entries()) {
+      const label = hosts.at(i) ?? '';
+      console.log(`  ${label.padEnd(maxLen + 3)}${resultText(r)}`);
     }
   }
 
@@ -101,8 +127,11 @@ export async function batch(hosts: string[]): Promise<void> {
     }
 
     for (const group of groups.values()) {
-      const hosts = group.map((r) => r.host);
-      await diagnoseHost(group[0].host, 443, hosts);
+      const groupHosts = group.map((r) => r.host);
+      const [first] = group;
+      if (first !== undefined) {
+        await diagnoseHost(first.host, 443, groupHosts);
+      }
     }
   }
 }

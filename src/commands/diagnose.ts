@@ -239,12 +239,36 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
     console.log(`     ${chalk.dim('(no redirects)')}`);
   }
 
-  const headerEntries = Object.entries(result.headers);
+  const headerEntries = Object.entries(result.headers).filter(
+    ([key]) => key !== 'strict-transport-security',
+  );
   if (headerEntries.length > 0) {
     console.log(`     ${chalk.dim('headers:')}`);
     for (const [key, val] of headerEntries) {
       console.log(`       ${chalk.dim(key + ':')} ${val}`);
     }
+  }
+
+  if (result.hsts) {
+    const days = Math.floor(result.hsts.maxAge / 86400);
+    const ageLabel = days >= 1 ? `${days}d` : `${result.hsts.maxAge}s`;
+    const tooShort = result.hsts.maxAge < 180 * 86400;
+    const extrasStr =
+      (result.hsts.includeSubDomains ? ' · includeSubDomains' : '') +
+      (result.hsts.preload ? ' · preload' : '');
+    if (tooShort) {
+      console.log(
+        `     ${chalk.dim('hsts:')}    ${chalk.yellow(`⚠ max-age ${ageLabel} — increase to ≥ 180d`)}`,
+      );
+    } else {
+      console.log(
+        `     ${chalk.dim('hsts:')}    ${chalk.green(`✓ max-age ${ageLabel}${extrasStr}`)}`,
+      );
+    }
+  } else {
+    console.log(
+      `     ${chalk.dim('hsts:')}    ${chalk.yellow('✗ not set — site can be downgraded to HTTP')}`,
+    );
   }
 
   if (result.ipv4 !== undefined || result.ipv6 !== undefined) {

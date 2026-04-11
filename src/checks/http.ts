@@ -1,6 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
-import type { HttpResult, IpCheckResult, WwwCheckResult } from '../types.js';
+import type { HttpResult, HstsInfo, IpCheckResult, WwwCheckResult } from '../types.js';
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 5000;
@@ -15,6 +15,7 @@ const KEY_HEADERS = [
   'cf-ray',
   'cf-cache-status',
   'x-powered-by',
+  'strict-transport-security',
 ];
 
 export async function checkHttp(
@@ -50,6 +51,10 @@ export async function checkHttp(
   const mainFinalStatus = main.statusCode;
   const browserDiffers = browserFinalStatus >= 400 && mainFinalStatus < 400;
 
+  const hsts = main.headers['strict-transport-security']
+    ? parseHsts(main.headers['strict-transport-security'])
+    : undefined;
+
   return {
     ...main,
     ipv4,
@@ -57,6 +62,7 @@ export async function checkHttp(
     browserStatusCode: browserResult.statusCode,
     browserDiffers,
     wwwCheck,
+    hsts,
   };
 }
 
@@ -257,4 +263,13 @@ function formatHttpError(err: Error): string {
   if (err.message.includes('ENOTFOUND')) return 'Host not found';
   if (err.message.includes('certificate')) return 'TLS/certificate error';
   return err.message;
+}
+
+export function parseHsts(value: string): HstsInfo {
+  const lower = value.toLowerCase();
+  const maxAgeMatch = /max-age=(\d+)/.exec(lower);
+  const maxAge = maxAgeMatch?.[1] !== undefined ? parseInt(maxAgeMatch[1], 10) : 0;
+  const includeSubDomains = lower.includes('includesubdomains');
+  const preload = lower.includes('preload');
+  return { raw: value, maxAge, includeSubDomains, preload };
 }

@@ -8,8 +8,9 @@ program
   .description('See why your users cannot connect')
   .argument('<host...>', 'one or more hosts to diagnose')
   .action(async (hosts: string[]) => {
-    if (hosts.length === 1) {
-      await diagnose(hosts[0]);
+    const [first] = hosts;
+    if (hosts.length === 1 && first !== undefined) {
+      await diagnose(first);
     } else {
       await batch(hosts);
     }

@@ -1,4 +1,10 @@
-import { detectCdn, detectBlock, resolveRedirect, checkWwwRedirect } from '../src/checks/http.js';
+import {
+  detectCdn,
+  detectBlock,
+  resolveRedirect,
+  checkWwwRedirect,
+  parseHsts,
+} from '../src/checks/http.js';
 
 describe('detectCdn', () => {
   it('detects Cloudflare via cf-ray header', () => {
@@ -85,5 +91,42 @@ describe('checkWwwRedirect', () => {
   it('returns skipped for localhost', async () => {
     const result = await checkWwwRedirect('localhost', []);
     expect(result.kind).toBe('skipped');
+  });
+});
+
+describe('parseHsts', () => {
+  it('parses max-age', () => {
+    const result = parseHsts('max-age=31536000');
+    expect(result.maxAge).toBe(31536000);
+    expect(result.includeSubDomains).toBe(false);
+    expect(result.preload).toBe(false);
+  });
+
+  it('parses includeSubDomains', () => {
+    const result = parseHsts('max-age=31536000; includeSubDomains');
+    expect(result.includeSubDomains).toBe(true);
+    expect(result.preload).toBe(false);
+  });
+
+  it('parses preload', () => {
+    const result = parseHsts('max-age=31536000; includeSubDomains; preload');
+    expect(result.includeSubDomains).toBe(true);
+    expect(result.preload).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    const result = parseHsts('max-age=31536000; IncludeSubDomains; Preload');
+    expect(result.includeSubDomains).toBe(true);
+    expect(result.preload).toBe(true);
+  });
+
+  it('returns maxAge 0 when missing', () => {
+    const result = parseHsts('includeSubDomains');
+    expect(result.maxAge).toBe(0);
+  });
+
+  it('preserves raw value', () => {
+    const raw = 'max-age=31536000; includeSubDomains';
+    expect(parseHsts(raw).raw).toBe(raw);
   });
 });
