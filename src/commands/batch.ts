@@ -34,24 +34,46 @@ async function checkOne(host: string): Promise<BatchResult> {
 export async function batch(hosts: string[]): Promise<void> {
   console.log();
 
-  const results: BatchResult[] = [];
+  const maxLen = Math.max(...hosts.map((h) => h.length));
+  // isTTY is undefined in non-TTY environments (pipes, CI)
+  const isTTY = (process.stdout as { isTTY?: boolean }).isTTY === true;
 
-  for (const host of hosts) {
-    const spinner = ora(host).start();
-    const result = await checkOne(host);
+  const resultText = (r: BatchResult): string =>
+    r.ok
+      ? chalk.green('✓ WORKING')
+      : chalk.red('✗ NOT WORKING') + (r.failedAt ? chalk.dim(` (${r.failedAt})`) : '');
+
+  let results: BatchResult[];
+
+  if (isTTY) {
+    // Print all rows upfront with a placeholder
+    for (const host of hosts) {
+      process.stdout.write(`  ${host.padEnd(maxLen + 3)}${chalk.dim('· · ·')}\n`);
+    }
+
+    // Update a specific row in-place using ANSI cursor movement
+    const updateRow = (index: number, text: string): void => {
+      const up = hosts.length - index;
+      process.stdout.write(
+        `\x1b[${up}A\r\x1b[2K  ${hosts[index].padEnd(maxLen + 3)}${text}\x1b[${up}B\r`,
+      );
+    };
+
+    results = await Promise.all(
+      hosts.map(async (host, i) => {
+        const result = await checkOne(host);
+        updateRow(i, resultText(result));
+        return result;
+      }),
+    );
+  } else {
+    // Non-TTY (CI / pipes): single spinner, print table after all done
+    const spinner = ora(`Checking ${hosts.length} domains...`).start();
+    results = await Promise.all(hosts.map((host) => checkOne(host)));
     spinner.stop();
-    results.push(result);
-  }
 
-  const maxLen = Math.max(...results.map((r) => r.host.length));
-
-  for (const r of results) {
-    const padded = r.host.padEnd(maxLen + 3);
-    if (r.ok) {
-      console.log(`  ${padded}${chalk.green('✓ WORKING')}`);
-    } else {
-      const reason = r.failedAt ? chalk.dim(` (${r.failedAt})`) : '';
-      console.log(`  ${padded}${chalk.red('✗ NOT WORKING')}${reason}`);
+    for (let i = 0; i < results.length; i++) {
+      console.log(`  ${hosts[i].padEnd(maxLen + 3)}${resultText(results[i])}`);
     }
   }
 
