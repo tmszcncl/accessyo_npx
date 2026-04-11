@@ -1,3 +1,9 @@
+export interface IpCheckResult {
+  ok: boolean;
+  statusCode?: number;
+  error?: string;
+}
+
 export interface HttpResult {
   ok: boolean;
   durationMs: number;
@@ -6,6 +12,10 @@ export interface HttpResult {
   headers: Record<string, string>;
   error?: string;
   blockedBy?: string;
+  ipv4?: IpCheckResult;
+  ipv6?: IpCheckResult;
+  browserStatusCode?: number;
+  browserDiffers?: boolean;
 }
 
 export interface TcpResult {

@@ -17,7 +17,7 @@ export async function diagnose(host: string, port = 443): Promise<void> {
   const dns = await checkDns(host);
   const tcp = dns.ok ? await checkTcp(host, port) : null;
   const tls = tcp?.ok ? await checkTls(host, port) : null;
-  const http = (tls?.ok ?? tcp?.ok) ? await checkHttp(host) : null;
+  const http = (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords) : null;
 
   spinner.stop();
 
@@ -138,7 +138,7 @@ function printHttp(result: HttpResult | null): void {
     console.log(`  ${chalk.red('✗')}  HTTP${block}  ${duration}`);
     console.log();
     if (result.blockedBy) {
-      console.log(`     ${chalk.red(`Request blocked by CDN / WAF`)}`);
+      console.log(`     ${chalk.red('Request blocked by CDN / WAF')}`);
     } else {
       console.log(`     ${chalk.red(result.error ?? `HTTP ${result.statusCode ?? 'error'}`)}`);
     }
@@ -167,13 +167,45 @@ function printHttp(result: HttpResult | null): void {
     }
   }
 
+  if (result.ipv4 !== undefined || result.ipv6 !== undefined) {
+    console.log(`     ${chalk.dim('connectivity:')}`);
+    if (result.ipv4 !== undefined) {
+      const icon = result.ipv4.ok ? chalk.green('✓') : chalk.red('✗');
+      const text = result.ipv4.ok ? chalk.green('OK') : chalk.red('FAIL');
+      console.log(`       ${chalk.dim('IPv4:')} ${icon} ${text}`);
+    }
+    if (result.ipv6 !== undefined) {
+      const icon = result.ipv6.ok ? chalk.green('✓') : chalk.red('✗');
+      const text = result.ipv6.ok ? chalk.green('OK') : chalk.red('FAIL');
+      console.log(`       ${chalk.dim('IPv6:')} ${icon} ${text}`);
+    }
+  }
+
   const status = result.statusCode ?? 0;
   if (status >= 200 && status < 300) {
     console.log(`     ${chalk.dim('→')} HTTP OK`);
-  } else if (status >= 400 && status < 500) {
-    console.log(`     ${chalk.yellow('→')} client error — possible access restriction`);
+  } else if (status >= 300 && status < 400) {
+    console.log(`     ${chalk.dim('→')} redirects detected`);
+  } else if (status === 403 || status === 503) {
+    console.log(`     ${chalk.yellow('→')} request blocked (possible CDN / WAF)`);
+  } else if (status === 404) {
+    console.log(`     ${chalk.yellow('→')} page not found`);
   } else if (status >= 500) {
     console.log(`     ${chalk.red('→')} server error`);
+  } else if (status >= 400) {
+    console.log(`     ${chalk.yellow('→')} client error — possible access restriction`);
+  }
+
+  if (result.ipv6 !== undefined && !result.ipv6.ok) {
+    console.log(`     ${chalk.yellow('→')} IPv6 connectivity issue`);
+  }
+
+  if (result.browserDiffers === true) {
+    console.log(`     ${chalk.yellow('→')} server responds differently to browsers (status: ${result.browserStatusCode ?? '?'} vs ${status})`);
+  }
+
+  if (result.durationMs > 2000) {
+    console.log(`     ${chalk.yellow('→')} slow response (${result.durationMs}ms)`);
   }
 }
 
