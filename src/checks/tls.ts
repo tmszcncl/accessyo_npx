@@ -25,6 +25,10 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
       const certIssuer = parseCertIssuer(cert.issuer as Record<string, string> | undefined);
       const certValidTo = cert.valid_to !== '' ? cert.valid_to : undefined;
       const certExpired = certValidTo !== undefined ? new Date(certValidTo) < new Date() : false;
+      const certDaysRemaining =
+        certValidTo !== undefined
+          ? Math.floor((new Date(certValidTo).getTime() - Date.now()) / 86_400_000)
+          : undefined;
 
       socket.destroy();
       resolve({
@@ -35,6 +39,7 @@ export function checkTls(host: string, port = 443, timeoutMs = 5000): Promise<Tl
         certIssuer,
         certValidTo,
         certExpired,
+        certDaysRemaining,
       });
     });
 

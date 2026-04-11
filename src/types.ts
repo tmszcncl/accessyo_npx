@@ -12,6 +12,7 @@ export interface HttpResult {
   headers: Record<string, string>;
   error?: string;
   blockedBy?: string;
+  cdn?: string;
   ipv4?: IpCheckResult;
   ipv6?: IpCheckResult;
   browserStatusCode?: number;
@@ -33,6 +34,7 @@ export interface TlsResult {
   certIssuer?: string;
   certValidTo?: string;
   certExpired?: boolean;
+  certDaysRemaining?: number;
   error?: string;
 }
 

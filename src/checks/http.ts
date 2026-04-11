@@ -93,6 +93,7 @@ function followRedirects(
         }
 
         const blockedBy = detectBlock(statusCode, filteredHeaders);
+        const cdn = detectCdn(filteredHeaders);
 
         resolve({
           ok: statusCode >= 200 && statusCode < 500 && !blockedBy,
@@ -101,6 +102,7 @@ function followRedirects(
           redirects: chain,
           headers: filteredHeaders,
           blockedBy,
+          cdn,
         });
       },
     );
@@ -147,13 +149,21 @@ export function resolveRedirect(base: string, location: string): string {
   return `${origin}${location}`;
 }
 
-export function detectBlock(status: number, headers: Record<string, string>): string | undefined {
-  const isCloudflare =
+export function detectCdn(headers: Record<string, string>): string | undefined {
+  if (
     'cf-ray' in headers ||
     'cf-cache-status' in headers ||
-    headers.server?.toLowerCase().includes('cloudflare');
+    headers.server?.toLowerCase().includes('cloudflare')
+  ) {
+    return 'Cloudflare';
+  }
+  return undefined;
+}
 
-  if (isCloudflare && (status === 403 || status === 503)) return 'Cloudflare';
+export function detectBlock(status: number, headers: Record<string, string>): string | undefined {
+  const cdn = detectCdn(headers);
+  if (cdn && (status === 403 || status === 503)) return cdn;
+  if (status === 403) return 'server-side';
   return undefined;
 }
 

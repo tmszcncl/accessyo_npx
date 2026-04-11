@@ -125,6 +125,18 @@ function printTls(result: TlsResult | null): void {
   }
 
   console.log(`     ${chalk.dim('→')} TLS handshake successful`);
+
+  if (result.certExpired) {
+    console.log(`     ${chalk.red('→')} certificate expired`);
+  } else if (result.certDaysRemaining !== undefined && result.certDaysRemaining < 14) {
+    console.log(
+      `     ${chalk.yellow('→')} certificate expiring soon (~${result.certDaysRemaining} days remaining)`,
+    );
+  } else if (result.certDaysRemaining !== undefined) {
+    console.log(
+      `     ${chalk.dim('→')} certificate valid (~${result.certDaysRemaining} days remaining)`,
+    );
+  }
 }
 
 function printHttp(result: HttpResult | null): void {
@@ -139,8 +151,10 @@ function printHttp(result: HttpResult | null): void {
     const block = result.blockedBy ? ` (${result.blockedBy})` : '';
     console.log(`  ${chalk.red('✗')}  HTTP${block}  ${duration}`);
     console.log();
-    if (result.blockedBy) {
-      console.log(`     ${chalk.red('Request blocked by CDN / WAF')}`);
+    if (result.blockedBy === 'Cloudflare') {
+      console.log(`     ${chalk.red('Request blocked by Cloudflare / WAF')}`);
+    } else if (result.blockedBy === 'server-side') {
+      console.log(`     ${chalk.red('Request blocked (server-side 403)')}`);
     } else {
       console.log(`     ${chalk.red(result.error ?? `HTTP ${result.statusCode ?? 'error'}`)}`);
     }
@@ -196,6 +210,10 @@ function printHttp(result: HttpResult | null): void {
     console.log(`     ${chalk.red('→')} server error`);
   } else if (status >= 400) {
     console.log(`     ${chalk.yellow('→')} client error — possible access restriction`);
+  }
+
+  if (result.cdn) {
+    console.log(`     ${chalk.dim('→')} served via ${result.cdn}`);
   }
 
   if (result.ipv6 !== undefined && !result.ipv6.ok) {
