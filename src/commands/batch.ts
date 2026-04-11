@@ -58,7 +58,7 @@ async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
   return { host, ok: true, warnings };
 }
 
-export async function batch(hosts: string[], timeoutMs = 5000, json = false): Promise<void> {
+export async function batch(hosts: string[], timeoutMs = 5000, json = false): Promise<boolean> {
   if (json) {
     const results = await Promise.all(
       hosts.map(async (host) => {
@@ -73,7 +73,7 @@ export async function batch(hosts: string[], timeoutMs = 5000, json = false): Pr
       }),
     );
     console.log(JSON.stringify(results, null, 2));
-    return;
+    return results.every((result) => result.summary.ok);
   }
   console.log();
 
@@ -155,4 +155,6 @@ export async function batch(hosts: string[], timeoutMs = 5000, json = false): Pr
       }
     }
   }
+
+  return failing === 0;
 }

@@ -14,15 +14,16 @@ export async function diagnose(
   port = 443,
   timeoutMs = 5000,
   json = false,
-): Promise<void> {
+): Promise<boolean> {
   if (json) {
     const dns = await checkDns(host, timeoutMs);
     const tcp = dns.ok ? await checkTcp(host, port, timeoutMs) : null;
     const tls = tcp?.ok ? await checkTls(host, port, timeoutMs) : null;
     const http =
       (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs) : null;
-    console.log(JSON.stringify(buildJsonOutput(host, dns, tcp, tls, http), null, 2));
-    return;
+    const output = buildJsonOutput(host, dns, tcp, tls, http);
+    console.log(JSON.stringify(output, null, 2));
+    return output.summary.ok;
   }
 
   console.log();
@@ -33,7 +34,7 @@ export async function diagnose(
 
   printNetworkContext(ctx);
 
-  await diagnoseHost(host, port, undefined, timeoutMs);
+  return diagnoseHost(host, port, undefined, timeoutMs);
 }
 
 export async function diagnoseHost(
@@ -41,7 +42,7 @@ export async function diagnoseHost(
   port = 443,
   displayHosts?: string[],
   timeoutMs = 5000,
-): Promise<void> {
+): Promise<boolean> {
   const hideTiming = displayHosts !== undefined;
   let header: string;
   if (!displayHosts) {
@@ -74,6 +75,8 @@ export async function diagnoseHost(
   console.log();
   printSummary({ dns, tcp, tls, http });
   console.log();
+
+  return buildSummary({ dns, tcp, tls, http }).allOk;
 }
 
 function printNetworkContext(ctx: NetworkContext): void {
@@ -135,7 +138,9 @@ function printDns(result: DnsResult, hideTiming = false): void {
       console.log(`     ${chalk.dim('1.1.1.1:')} ${ipsText}`);
     }
     if (splitHorizon) {
-      console.log(`     ${chalk.yellow('→')} ${chalk.yellow('split-horizon DNS detected (system DNS returns private IP)')}`);
+      console.log(
+        `     ${chalk.yellow('→')} ${chalk.yellow('split-horizon DNS detected (system DNS returns private IP)')}`,
+      );
     }
   }
 

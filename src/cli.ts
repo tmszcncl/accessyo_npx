@@ -13,10 +13,14 @@ program
     const timeoutMs = Math.max(500, parseInt(opts.timeout, 10) || 5000);
     const json = opts.json === true;
     const [first] = hosts;
+    let ok: boolean;
     if (hosts.length === 1 && first !== undefined) {
-      await diagnose(first, 443, timeoutMs, json);
+      ok = await diagnose(first, 443, timeoutMs, json);
     } else {
-      await batch(hosts, timeoutMs, json);
+      ok = await batch(hosts, timeoutMs, json);
+    }
+    if (!ok) {
+      process.exitCode = 1;
     }
   });
 
@@ -27,7 +31,10 @@ program
   .option('--json', 'output results as JSON')
   .action(async (host: string, opts: { timeout: string; json?: boolean }) => {
     const timeoutMs = Math.max(500, parseInt(opts.timeout, 10) || 5000);
-    await diagnose(host, 443, timeoutMs, opts.json === true);
+    const ok = await diagnose(host, 443, timeoutMs, opts.json === true);
+    if (!ok) {
+      process.exitCode = 1;
+    }
   });
 
 await program.parseAsync();

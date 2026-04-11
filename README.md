@@ -67,6 +67,98 @@ npx accessyo example.com --json
 npx accessyo example.com --timeout 3000
 ```
 
+## How diagnosis works
+
+Accessyo runs checks in order:
+
+1. DNS
+2. TCP (port 443)
+3. TLS handshake
+4. HTTP request
+
+Each step depends on the previous one. Example: if DNS fails, TCP/TLS/HTTP are skipped for that host.
+
+At the end, Accessyo builds a summary with:
+
+- overall status (`ok`)
+- likely root cause (`problem`, `likelyCause`)
+- actionable hints (`whatYouCanDo`)
+
+## How to read output
+
+- `✓ WORKING`: all hard checks passed
+- `✗ NOT WORKING`: one of DNS/TCP/TLS/HTTP failed
+- `⚠ warning`: non-fatal issue (for example short HSTS, split-horizon DNS, slow response)
+
+In batch mode, hosts with the same failure type are grouped and shown with one detailed diagnostic block.
+
+## JSON output (CI / integrations)
+
+`--json` returns machine-readable output with no spinner/table formatting.
+
+Single host:
+
+```bash
+npx accessyo example.com --json
+```
+
+Batch (multiple hosts):
+
+```bash
+npx accessyo example.com api.example.com cdn.example.com --json
+```
+
+Single output shape:
+
+```json
+{
+  "host": "example.com",
+  "timestamp": "2026-04-11T10:00:00.000Z",
+  "checks": {
+    "dns": { "ok": true, "durationMs": 12 },
+    "tcp": { "ok": true, "durationMs": 30 },
+    "tls": { "ok": true, "durationMs": 80 },
+    "http": { "ok": true, "durationMs": 150, "statusCode": 200 }
+  },
+  "summary": {
+    "ok": true,
+    "problem": null,
+    "likelyCause": null,
+    "whatYouCanDo": [],
+    "totalMs": 272
+  }
+}
+```
+
+Batch output is an array of the same objects.
+
+Important fields:
+
+- `checks.dns` / `checks.tcp` / `checks.tls` / `checks.http`: raw check data
+- `summary.ok`: final pass/fail boolean for automation
+- `summary.problem`: short root-cause label when failed
+- `summary.likelyCause`: human-readable likely cause
+- `summary.whatYouCanDo`: suggested next actions
+- `summary.totalMs`: summed runtime across checks
+
+CI examples:
+
+```bash
+# Fail pipeline when any host is not OK
+npx accessyo example.com api.example.com --json | jq -e 'all(.[]; .summary.ok == true)'
+
+# Print failing hosts only
+npx accessyo example.com api.example.com --json | jq -r '.[] | select(.summary.ok != true) | .host'
+
+# Fail only when TLS fails
+npx accessyo example.com api.example.com --json | jq -e 'all(.[]; .checks.tls == null or .checks.tls.ok == true)'
+```
+
+Exit codes:
+
+- `0` when all checked hosts are OK
+- `1` when any checked host fails (single or batch, including `--json` mode)
+
 ```
   example.com        ✓ WORKING
   api.example.com    ✗ NOT WORKING (TLS)
@@ -85,6 +177,12 @@ npx accessyo example.com --timeout 3000
 ```
 
 Domains failing with the same error are grouped into a single debug block.
+
+## Known limitations
+
+- Some CDNs may rate-limit quick consecutive probes; IPv4/IPv6 quick checks can show timeout warnings.
+- DNS comparison for split-horizon currently uses system resolver vs `1.1.1.1`.
+- Results depend on your local network path (ISP, VPN, corporate proxy, firewall).
 
 Not yet published to npm. Follow the repo to stay updated.
 
