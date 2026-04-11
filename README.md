@@ -7,6 +7,8 @@
 
 > Work in progress. Not yet published to npm.
 
+🌐 [accessyo.com](https://accessyo.com)
+
 ---
 
 ## What is Accessyo?
@@ -30,14 +32,18 @@ Accessyo does.
 
 ## Status
 
-This project is in early development. The repo currently contains the project scaffold:
+The CLI is in active development. Currently supports:
 
-- TypeScript + ESLint + Prettier setup
-- GitHub Actions CI (Node 18 / 20 / 22)
-- Automated npm publish on `v*` tags
-- `src/` directory structure
+- DNS resolution (A + AAAA records, TTL, resolver info, CDN detection)
+- TCP connectivity check
+- TLS handshake (protocol, cipher, certificate info)
+- HTTP request (status, redirects, key headers)
 
-CLI functionality is being built. Follow the repo to stay updated.
+```
+npx tsx src/cli.ts example.com
+```
+
+Not yet published to npm. Follow the repo to stay updated.
 
 ---
 
@@ -48,6 +54,10 @@ Accessyo CLI is open source (MIT). The backend, dashboard, alerting, and root ca
 This is an [open-core](https://en.wikipedia.org/wiki/Open-core_model) model.
 
 ---
+
+## License
+
+[MIT](LICENSE)
 
 ## License
 

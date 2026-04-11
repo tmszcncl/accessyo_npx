@@ -41,9 +41,11 @@
     "format:check": "prettier --check .",
     "prebuild": "npm run clean",
     "prepublishOnly": "npm run lint && npm run format:check && npm run build",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "dev": "tsx src/cli.ts",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --passWithNoTests",
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage --passWithNoTests"
   },
   "engines": {
     "node": ">=18.0.0"
