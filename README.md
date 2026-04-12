@@ -8,6 +8,7 @@
 > Published on npm: https://www.npmjs.com/package/accessyo
 
 🌐 [accessyo.com](https://accessyo.com)
+📦 [GitHub repository](https://github.com/tmszcncl/accessyo_npx)
 
 ---
 

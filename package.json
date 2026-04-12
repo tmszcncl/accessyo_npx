@@ -14,13 +14,13 @@
     "devops",
     "sre"
   ],
-  "homepage": "https://accessyo.com",
+  "homepage": "https://github.com/tmszcncl/accessyo_npx",
   "bugs": {
-    "url": "https://github.com/accessyo/accessyo/issues"
+    "url": "https://github.com/tmszcncl/accessyo_npx/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/accessyo/accessyo.git"
+    "url": "git+https://github.com/tmszcncl/accessyo_npx.git"
   },
   "license": "MIT",
   "author": "Accessyo Contributors",
