@@ -36,7 +36,7 @@ Accessyo does.
 
 The CLI is in active development. Currently supports:
 
-- Network context (public IP + location/ISP/ASN from ipapi with 1h cache, 5m failure backoff, DNS resolver)
+- Network context (location/ISP/ASN + public IP; masked by default, full with `--debug`)
 - DNS resolution (A, AAAA, CNAME records, TTL, resolver, split-horizon check vs 1.1.1.1)
 - TCP connectivity check
 - TLS handshake (protocol, cipher, certificate info + expiry, hostname match, HTTP/2 via ALPN)
@@ -51,7 +51,7 @@ The CLI is in active development. Currently supports:
 npx accessyo example.com
 ```
 
-**Multiple domains** (compact summary + auto-details for failures):
+**Multiple domains** (compact summary by default):
 
 ```
 npx accessyo example.com api.example.com cdn.example.com
@@ -62,10 +62,12 @@ npx accessyo example.com api.example.com cdn.example.com
 ```
 --timeout <ms>   per-check timeout in milliseconds (default: 5000)
 --json           output results as JSON
+--debug          show full diagnostic details
 ```
 
 ```
 npx accessyo example.com --json
+npx accessyo example.com --debug
 npx accessyo example.com --timeout 3000
 ```
 
@@ -88,11 +90,27 @@ At the end, Accessyo builds a summary with:
 
 ## How to read output
 
-- `✓ WORKING`: all hard checks passed
-- `✗ NOT WORKING`: one of DNS/TCP/TLS/HTTP failed
-- `⚠ warning`: non-fatal issue (for example short HSTS, split-horizon DNS, slow response)
+- `✓ WORKING`: site is reachable
+- `⚠ DEGRADED`: reachable, but quality/connectivity is degraded
+- `✗ FAIL`: critical check failed (DNS/TCP/TLS/HTTP)
+- `Warnings`: non-fatal issues (for example IPv6 failure, slow response, HSTS info)
 
-In batch mode, hosts with the same failure type are grouped and shown with one detailed diagnostic block.
+## Default vs debug output
+
+- Default output is safe to share:
+  - public IP is masked
+  - DNS resolver and full DNS record lists are hidden
+  - HTTP headers are minimized (only `server`, when present)
+- `--debug` shows full details:
+  - full public IP
+  - full DNS details (resolver, A/AAAA, resolver comparison, TTL)
+  - TLS internals (protocol/cipher/ALPN/cert details)
+  - full HTTP headers
+
+Multi-domain behavior:
+
+- default: compact table + totals
+- `--debug`: full per-domain output (no compact table)
 
 ## JSON output (CI / integrations)
 
@@ -163,22 +181,13 @@ Exit codes:
 
 ```
   example.com        ✓ WORKING
-  api.example.com    ✗ NOT WORKING (TLS)
-  cdn.example.com    ✓ WORKING
+  api.example.com    ✗ FAIL (TLS)
+  cdn.example.com    ✓ WORKING  ⚠ IPv6
 
 ────────────────────────────────────────
 
   1 working, 2 failing
-
-  api.example.com
-
-  ✗  TLS
-
-     certificate has expired
-  ...
 ```
-
-Domains failing with the same error are grouped into a single debug block.
 
 ## Known limitations
 

@@ -1,6 +1,7 @@
 import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import https from 'node:https';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import type { NetworkContext } from '../types.js';
@@ -84,7 +85,20 @@ export async function getIpApiNetworkInfo(
 }
 
 export function maskPublicIp(ip: string): string {
-  // Temporary: full IP display is enabled (masking will be revisited later).
+  if (net.isIPv4(ip)) {
+    const octets = ip.split('.');
+    if (octets.length === 4) {
+      return `${octets[0]}.${octets[1]}.xxx.xxx`;
+    }
+  }
+
+  if (net.isIPv6(ip)) {
+    const parts = ip.split(':').filter((part) => part.length > 0);
+    const first = parts[0] ?? 'xxxx';
+    const second = parts[1] ?? 'xxxx';
+    return `${first}:${second}:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx`;
+  }
+
   return ip;
 }
 

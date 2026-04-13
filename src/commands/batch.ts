@@ -58,7 +58,12 @@ async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
   return { host, ok: true, warnings };
 }
 
-export async function batch(hosts: string[], timeoutMs = 5000, json = false): Promise<boolean> {
+export async function batch(
+  hosts: string[],
+  timeoutMs = 5000,
+  json = false,
+  debug = false,
+): Promise<boolean> {
   if (json) {
     const results = await Promise.all(
       hosts.map(async (host) => {
@@ -75,6 +80,22 @@ export async function batch(hosts: string[], timeoutMs = 5000, json = false): Pr
     console.log(JSON.stringify(results, null, 2));
     return results.every((result) => result.summary.ok);
   }
+
+  if (debug) {
+    console.log();
+    let allOk = true;
+    const separator = chalk.dim('─'.repeat(40));
+    for (const [index, host] of hosts.entries()) {
+      if (index > 0) {
+        console.log(separator);
+        console.log();
+      }
+      const ok = await diagnoseHost(host, 443, undefined, timeoutMs, true);
+      allOk = allOk && ok;
+    }
+    return allOk;
+  }
+
   console.log();
 
   const maxLen = Math.max(...hosts.map((h) => h.length));
@@ -84,7 +105,7 @@ export async function batch(hosts: string[], timeoutMs = 5000, json = false): Pr
   const resultText = (r: BatchResult): string => {
     const status = r.ok
       ? chalk.green('✓ WORKING')
-      : chalk.red('✗ NOT WORKING') + (r.failedAt ? chalk.dim(` (${r.failedAt})`) : '');
+      : chalk.red('✗ FAIL') + (r.failedAt ? chalk.dim(` (${r.failedAt})`) : '');
     const warns =
       r.warnings.length > 0 ? '  ' + r.warnings.map((w) => chalk.yellow(`⚠ ${w}`)).join(' ') : '';
     return status + warns;
@@ -136,25 +157,6 @@ export async function batch(hosts: string[], timeoutMs = 5000, json = false): Pr
   const failingText = failing > 0 ? chalk.red(`${failing} failing`) : `${failing} failing`;
   console.log(`  ${workingText}, ${failingText}`);
   console.log();
-
-  const failures = results.filter((r) => !r.ok);
-  if (failures.length > 0) {
-    const groups = new Map<string, BatchResult[]>();
-    for (const r of failures) {
-      const key = r.failedAt ?? 'unknown';
-      const group = groups.get(key) ?? [];
-      group.push(r);
-      groups.set(key, group);
-    }
-
-    for (const group of groups.values()) {
-      const groupHosts = group.map((r) => r.host);
-      const [first] = group;
-      if (first !== undefined) {
-        await diagnoseHost(first.host, 443, groupHosts, timeoutMs);
-      }
-    }
-  }
 
   return failing === 0;
 }

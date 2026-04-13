@@ -83,7 +83,7 @@ export function buildSummary(input: SummaryInput): SummaryResult {
   return {
     allOk: true,
     status,
-    explanation: 'site is reachable and working',
+    explanation: 'site is reachable',
     warnings,
     problem: null,
     likelyCause: null,
@@ -204,7 +204,7 @@ function collectWarnings(input: SummaryInput): SummaryWarning[] {
       warnings.push({
         level: 'info',
         title: 'HSTS not set on this hostname',
-        impact: ['may be enforced on redirect target'],
+        impact: ['likely enforced on redirect target'],
       });
     } else {
       warnings.push({

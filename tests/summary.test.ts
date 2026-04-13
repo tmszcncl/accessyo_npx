@@ -80,6 +80,7 @@ describe('buildSummary', () => {
     const result = buildSummary({ dns: okDns, tcp: okTcp, tls: okTls, http: makeHttp() });
     expect(result.status).toBe('WORKING');
     expect(result.allOk).toBe(true);
+    expect(result.explanation).toBe('site is reachable');
     expect(result.problem).toBeNull();
     expect(result.warnings).toHaveLength(1); // missing HSTS
     expect(result.warnings[0]?.title).toBe('missing HSTS');
@@ -146,6 +147,7 @@ describe('buildSummary', () => {
     const hstsInfo = result.warnings.find((w) => w.title === 'HSTS not set on this hostname');
     expect(hstsInfo).toBeDefined();
     expect(hstsInfo?.level).toBe('info');
+    expect(hstsInfo?.impact).toContain('likely enforced on redirect target');
   });
 
   it('does not include partial connectivity warning', () => {

@@ -9,11 +9,17 @@ import { buildSummary } from '../summary.js';
 import { buildJsonOutput } from './json-output.js';
 import type { DnsResult, TcpResult, TlsResult, HttpResult, NetworkContext } from '../types.js';
 
+interface RenderOptions {
+  debug: boolean;
+  hideTiming: boolean;
+}
+
 export async function diagnose(
   host: string,
   port = 443,
   timeoutMs = 5000,
   json = false,
+  debug = false,
 ): Promise<boolean> {
   if (json) {
     const dns = await checkDns(host, timeoutMs);
@@ -32,9 +38,9 @@ export async function diagnose(
   const ctx = await getNetworkContext();
   spinner.stop();
 
-  printNetworkContext(ctx);
+  printNetworkContext(ctx, debug);
 
-  return diagnoseHost(host, port, undefined, timeoutMs);
+  return diagnoseHost(host, port, undefined, timeoutMs, debug);
 }
 
 export async function diagnoseHost(
@@ -42,8 +48,12 @@ export async function diagnoseHost(
   port = 443,
   displayHosts?: string[],
   timeoutMs = 5000,
+  debug = false,
 ): Promise<boolean> {
-  const hideTiming = displayHosts !== undefined;
+  const render: RenderOptions = {
+    debug,
+    hideTiming: displayHosts !== undefined,
+  };
   let header: string;
   if (!displayHosts) {
     header = host;
@@ -65,13 +75,13 @@ export async function diagnoseHost(
 
   spinner2.stop();
 
-  printDns(dns, hideTiming);
+  printDns(dns, render);
   console.log();
-  printTcp(tcp, !dns.ok, hideTiming);
+  printTcp(tcp, !dns.ok, render.hideTiming);
   console.log();
-  printTls(tls, hideTiming);
+  printTls(tls, render);
   console.log();
-  printHttp(http, hideTiming);
+  printHttp(http, render);
   console.log();
   printSummary({ dns, tcp, tls, http });
   console.log();
@@ -79,7 +89,7 @@ export async function diagnoseHost(
   return buildSummary({ dns, tcp, tls, http }).allOk;
 }
 
-function printNetworkContext(ctx: NetworkContext): void {
+function printNetworkContext(ctx: NetworkContext, debug: boolean): void {
   const line = chalk.dim('─'.repeat(40));
   console.log(`  ${chalk.bold('Network')}`);
   console.log();
@@ -88,7 +98,10 @@ function printNetworkContext(ctx: NetworkContext): void {
   if (location) printNetworkRow('Location', location);
   if (ctx.isp) printNetworkRow('ISP', ctx.isp);
   if (ctx.asn) printNetworkRow('ASN', ctx.asn);
-  if (ctx.publicIp) printNetworkRow('IP', maskPublicIp(ctx.publicIp));
+  if (ctx.publicIp) {
+    const ip = debug ? ctx.publicIp : maskPublicIp(ctx.publicIp);
+    printNetworkRow('IP', ip);
+  }
 
   console.log();
   console.log(line);
@@ -105,8 +118,17 @@ function formatLocation(countryName: string | undefined, countryCode: string | u
   return countryName ?? countryCode;
 }
 
-function printDns(result: DnsResult, hideTiming = false): void {
-  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
+export function getDnsResolutionSummary(result: DnsResult): string {
+  const hasIPv4 = (result.aRecords?.length ?? 0) > 0;
+  const hasIPv6 = (result.aaaaRecords?.length ?? 0) > 0;
+  if (hasIPv4 && hasIPv6) return 'resolved (IPv4 + IPv6)';
+  if (hasIPv4) return 'resolved (IPv4)';
+  if (hasIPv6) return 'resolved (IPv6)';
+  return 'resolved';
+}
+
+function printDns(result: DnsResult, render: RenderOptions): void {
+  const duration = render.hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
     const code = result.errorCode ? ` (${result.errorCode})` : '';
@@ -121,46 +143,48 @@ function printDns(result: DnsResult, hideTiming = false): void {
     return;
   }
 
-  console.log(
-    `  ${chalk.green('✓')}  DNS${duration}  ${chalk.dim(`(resolver: ${result.resolver})`)}`,
-  );
+  if (render.debug) {
+    console.log(
+      `  ${chalk.green('✓')}  DNS${duration}  ${chalk.dim(`(resolver: ${result.resolver})`)}`,
+    );
 
-  if (result.aRecords && result.aRecords.length > 0) {
-    console.log(`     ${chalk.dim('A:')}    ${result.aRecords.join(', ')}`);
-  }
-
-  if (result.aaaaRecords && result.aaaaRecords.length > 0) {
-    console.log(`     ${chalk.dim('AAAA:')} ${result.aaaaRecords.join(', ')}`);
-  }
-
-  if (result.cname) {
-    console.log(`     ${chalk.dim('CNAME:')} ${result.cname}`);
-  }
-
-  if (result.resolverComparison) {
-    const { publicIps, splitHorizon } = result.resolverComparison;
-    const sameIps =
-      publicIps.length === (result.aRecords?.length ?? 0) &&
-      publicIps.every((ip) => result.aRecords?.includes(ip));
-    if (!sameIps) {
-      const ipsText = publicIps.length > 0 ? publicIps.join(', ') : chalk.dim('(no response)');
-      console.log(`     ${chalk.dim('1.1.1.1:')} ${ipsText}`);
+    if (result.aRecords && result.aRecords.length > 0) {
+      console.log(`     ${chalk.dim('A:')}    ${result.aRecords.join(', ')}`);
     }
-    if (splitHorizon) {
-      console.log(
-        `     ${chalk.yellow('→')} ${chalk.yellow('split-horizon DNS detected (system DNS returns private IP)')}`,
-      );
-    }
-  }
 
-  if (!result.aRecords?.length && result.aaaaRecords?.length) {
-    console.log(`     ${chalk.yellow('→')} IPv6 only — may fail on some networks`);
-  } else {
+    if (result.aaaaRecords && result.aaaaRecords.length > 0) {
+      console.log(`     ${chalk.dim('AAAA:')} ${result.aaaaRecords.join(', ')}`);
+    }
+
+    if (result.cname) {
+      console.log(`     ${chalk.dim('CNAME:')} ${result.cname}`);
+    }
+
+    if (result.resolverComparison) {
+      const { publicIps, splitHorizon } = result.resolverComparison;
+      const sameIps =
+        publicIps.length === (result.aRecords?.length ?? 0) &&
+        publicIps.every((ip) => result.aRecords?.includes(ip));
+      if (!sameIps) {
+        const ipsText = publicIps.length > 0 ? publicIps.join(', ') : chalk.dim('(no response)');
+        console.log(`     ${chalk.dim('1.1.1.1:')} ${ipsText}`);
+      }
+      if (splitHorizon) {
+        console.log(
+          `     ${chalk.yellow('→')} ${chalk.yellow('split-horizon DNS detected (system DNS returns private IP)')}`,
+        );
+      }
+    }
+
     if (result.ttl !== undefined) {
       console.log(`     ${chalk.dim('TTL:')}  ${result.ttl}s`);
     }
     console.log(`     ${chalk.dim('→')} resolves correctly`);
+    return;
   }
+
+  console.log(`  ${chalk.green('✓')}  DNS${duration}`);
+  console.log(`     ${chalk.dim('→')} ${getDnsResolutionSummary(result)}`);
 }
 
 function printTcp(result: TcpResult | null, dnsFailed = false, hideTiming = false): void {
@@ -180,16 +204,16 @@ function printTcp(result: TcpResult | null, dnsFailed = false, hideTiming = fals
     return;
   }
 
-  console.log(`  ${chalk.green('✓')}  TCP${duration}  ${chalk.dim(`(port ${result.port})}`)}`);
+  console.log(`  ${chalk.green('✓')}  TCP${duration}  ${chalk.dim(`(port ${result.port})`)}`);
 }
 
-function printTls(result: TlsResult | null, hideTiming = false): void {
+function printTls(result: TlsResult | null, render: RenderOptions): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  TLS  ${chalk.dim('skipped')}`);
     return;
   }
 
-  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
+  const duration = render.hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
     console.log(`  ${chalk.red('✗')}  TLS${duration}`);
@@ -200,26 +224,28 @@ function printTls(result: TlsResult | null, hideTiming = false): void {
 
   console.log(`  ${chalk.green('✓')}  TLS${duration}`);
 
-  if (result.protocol) console.log(`     ${chalk.dim('protocol:')} ${result.protocol}`);
-  if (result.cipher) console.log(`     ${chalk.dim('cipher:')}   ${result.cipher}`);
-  if (result.alpnProtocol) {
-    const h2 = result.alpnProtocol === 'h2';
-    const label = h2 ? chalk.green('HTTP/2') : chalk.dim('HTTP/1.1');
-    console.log(`     ${chalk.dim('ALPN:')}    ${label}`);
-  }
-
-  if (result.certIssuer ?? result.certValidTo) {
-    console.log(`     ${chalk.dim('cert:')}`);
-    if (result.certIssuer) console.log(`       ${chalk.dim('issuer:')}   ${result.certIssuer}`);
-    if (result.certValidTo) {
-      const expiry = result.certExpired
-        ? chalk.red(`${result.certValidTo} (EXPIRED)`)
-        : result.certValidTo;
-      console.log(`       ${chalk.dim('valid to:')} ${expiry}`);
+  if (render.debug) {
+    if (result.protocol) console.log(`     ${chalk.dim('protocol:')} ${result.protocol}`);
+    if (result.cipher) console.log(`     ${chalk.dim('cipher:')}   ${result.cipher}`);
+    if (result.alpnProtocol) {
+      const h2 = result.alpnProtocol === 'h2';
+      const label = h2 ? chalk.green('HTTP/2') : chalk.dim('HTTP/1.1');
+      console.log(`     ${chalk.dim('ALPN:')}    ${label}`);
     }
-    if (result.hostnameMatch !== undefined) {
-      const label = result.hostnameMatch ? chalk.green('✓ OK') : chalk.red('✗ mismatch');
-      console.log(`       ${chalk.dim('hostname:')} ${label}`);
+
+    if (result.certIssuer ?? result.certValidTo) {
+      console.log(`     ${chalk.dim('cert:')}`);
+      if (result.certIssuer) console.log(`       ${chalk.dim('issuer:')}   ${result.certIssuer}`);
+      if (result.certValidTo) {
+        const expiry = result.certExpired
+          ? chalk.red(`${result.certValidTo} (EXPIRED)`)
+          : result.certValidTo;
+        console.log(`       ${chalk.dim('valid to:')} ${expiry}`);
+      }
+      if (result.hostnameMatch !== undefined) {
+        const label = result.hostnameMatch ? chalk.green('✓ OK') : chalk.red('✗ mismatch');
+        console.log(`       ${chalk.dim('hostname:')} ${label}`);
+      }
     }
   }
 
@@ -264,13 +290,27 @@ function redirectStepLabel(rawUrl: string): string {
   }
 }
 
-function printHttp(result: HttpResult | null, hideTiming = false): void {
+export function getVisibleHttpHeaders(
+  headers: Record<string, string>,
+  debug: boolean,
+): Array<[string, string]> {
+  if (debug) {
+    return Object.entries(headers)
+      .filter(([key]) => key !== 'strict-transport-security')
+      .sort(([a], [b]) => a.localeCompare(b));
+  }
+  const server = headers.server;
+  if (!server) return [];
+  return [['server', server]];
+}
+
+function printHttp(result: HttpResult | null, render: RenderOptions): void {
   if (result === null) {
     console.log(`  ${chalk.dim('–')}  HTTP  ${chalk.dim('skipped')}`);
     return;
   }
 
-  const duration = hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
+  const duration = render.hideTiming ? '' : ` ${chalk.dim(`${result.durationMs}ms`)}`;
 
   if (!result.ok) {
     const block = result.blockedBy ? ` (${result.blockedBy})` : '';
@@ -307,9 +347,7 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
     console.log(`     ${chalk.dim('(no redirects)')}`);
   }
 
-  const headerEntries = Object.entries(result.headers).filter(
-    ([key]) => key !== 'strict-transport-security',
-  );
+  const headerEntries = getVisibleHttpHeaders(result.headers, render.debug);
   if (headerEntries.length > 0) {
     console.log(`     ${chalk.dim('headers:')}`);
     for (const [key, val] of headerEntries) {
@@ -335,7 +373,7 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
     }
   } else {
     console.log(
-      `     ${chalk.dim('hsts:')}    ${chalk.yellow('✗ not set — site can be downgraded to HTTP')}`,
+      `     ${chalk.dim('hsts:')}    ${chalk.yellow('✗ not set')}`,
     );
   }
 
@@ -366,9 +404,7 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
   }
 
   const status = result.statusCode ?? 0;
-  if (status >= 200 && status < 300) {
-    console.log(`     ${chalk.dim('→')} HTTP OK`);
-  } else if (status >= 300 && status < 400) {
+  if (status >= 300 && status < 400) {
     console.log(`     ${chalk.dim('→')} redirects detected`);
   } else if (status === 403 || status === 503) {
     console.log(`     ${chalk.yellow('→')} request blocked (possible CDN / WAF)`);

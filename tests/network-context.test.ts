@@ -144,11 +144,11 @@ describe('getIpApiNetworkInfo cache policy', () => {
 });
 
 describe('maskPublicIp', () => {
-  it('returns full IPv4 value', () => {
-    expect(maskPublicIp('176.104.177.170')).toBe('176.104.177.170');
+  it('masks IPv4 to keep only first two octets', () => {
+    expect(maskPublicIp('176.104.177.170')).toBe('176.104.xxx.xxx');
   });
 
-  it('returns full IPv6 value', () => {
-    expect(maskPublicIp('2a00:1450:4025:804::65')).toBe('2a00:1450:4025:804::65');
+  it('masks IPv6 to keep only first two groups', () => {
+    expect(maskPublicIp('2a00:1450:4025:804::65')).toBe('2a00:1450:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx');
   });
 });
