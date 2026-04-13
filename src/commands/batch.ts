@@ -6,28 +6,30 @@ import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
 import { diagnoseHost } from './diagnose.js';
 import { buildJsonOutput } from './json-output.js';
+import { parseTarget } from '../target.js';
 
 interface BatchResult {
-  host: string;
+  target: string;
   ok: boolean;
   failedAt?: string;
   warnings: string[];
 }
 
-async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
-  const dns = await checkDns(host, timeoutMs);
-  if (!dns.ok) return { host, ok: false, failedAt: 'DNS', warnings: [] };
+async function checkOne(input: string, timeoutMs = 5000): Promise<BatchResult> {
+  const parsed = parseTarget(input);
+  const dns = await checkDns(parsed.host, timeoutMs);
+  if (!dns.ok) return { target: parsed.normalizedTarget, ok: false, failedAt: 'DNS', warnings: [] };
 
-  const tcp = await checkTcp(host, 443, timeoutMs);
-  if (!tcp.ok) return { host, ok: false, failedAt: 'TCP', warnings: [] };
+  const tcp = await checkTcp(parsed.host, parsed.port, timeoutMs);
+  if (!tcp.ok) return { target: parsed.normalizedTarget, ok: false, failedAt: 'TCP', warnings: [] };
 
-  const tls = await checkTls(host, 443, timeoutMs);
-  if (!tls.ok) return { host, ok: false, failedAt: 'TLS', warnings: [] };
+  const tls = await checkTls(parsed.host, parsed.port, timeoutMs);
+  if (!tls.ok) return { target: parsed.normalizedTarget, ok: false, failedAt: 'TLS', warnings: [] };
 
-  const http = await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs);
+  const http = await checkHttp(parsed.httpTarget, parsed.host, dns.aRecords, dns.aaaaRecords, timeoutMs);
   if (!http.ok) {
     const code = http.statusCode !== undefined ? ` ${http.statusCode}` : '';
-    return { host, ok: false, failedAt: `HTTP${code}`, warnings: [] };
+    return { target: parsed.normalizedTarget, ok: false, failedAt: `HTTP${code}`, warnings: [] };
   }
 
   const warnings: string[] = [];
@@ -55,7 +57,7 @@ async function checkOne(host: string, timeoutMs = 5000): Promise<BatchResult> {
     warnings.push(`slow ${http.durationMs}ms`);
   }
 
-  return { host, ok: true, warnings };
+  return { target: parsed.normalizedTarget, ok: true, warnings };
 }
 
 export async function batch(
@@ -66,15 +68,16 @@ export async function batch(
 ): Promise<boolean> {
   if (json) {
     const results = await Promise.all(
-      hosts.map(async (host) => {
-        const dns = await checkDns(host, timeoutMs);
-        const tcp = dns.ok ? await checkTcp(host, 443, timeoutMs) : null;
-        const tls = tcp?.ok ? await checkTls(host, 443, timeoutMs) : null;
+      hosts.map(async (input) => {
+        const parsed = parseTarget(input);
+        const dns = await checkDns(parsed.host, timeoutMs);
+        const tcp = dns.ok ? await checkTcp(parsed.host, parsed.port, timeoutMs) : null;
+        const tls = tcp?.ok ? await checkTls(parsed.host, parsed.port, timeoutMs) : null;
         const http =
           (tls?.ok ?? tcp?.ok)
-            ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs)
+            ? await checkHttp(parsed.httpTarget, parsed.host, dns.aRecords, dns.aaaaRecords, timeoutMs)
             : null;
-        return buildJsonOutput(host, dns, tcp, tls, http);
+        return buildJsonOutput(parsed.normalizedTarget, dns, tcp, tls, http);
       }),
     );
     console.log(JSON.stringify(results, null, 2));
@@ -98,7 +101,8 @@ export async function batch(
 
   console.log();
 
-  const maxLen = Math.max(...hosts.map((h) => h.length));
+  const labels = hosts.map((input) => parseTarget(input).normalizedTarget);
+  const maxLen = Math.max(...labels.map((h) => h.length));
   // isTTY is undefined in non-TTY environments (pipes, CI)
   const isTTY = (process.stdout as { isTTY?: boolean }).isTTY === true;
 
@@ -115,20 +119,20 @@ export async function batch(
 
   if (isTTY) {
     // Print all rows upfront with a placeholder
-    for (const host of hosts) {
-      process.stdout.write(`  ${host.padEnd(maxLen + 3)}${chalk.dim('· · ·')}\n`);
+    for (const label of labels) {
+      process.stdout.write(`  ${label.padEnd(maxLen + 3)}${chalk.dim('· · ·')}\n`);
     }
 
     // Update a specific row in-place using ANSI cursor movement
     const updateRow = (index: number, text: string): void => {
       const up = hosts.length - index;
-      const label = hosts.at(index) ?? '';
+      const label = labels.at(index) ?? '';
       process.stdout.write(`\x1b[${up}A\r\x1b[2K  ${label.padEnd(maxLen + 3)}${text}\x1b[${up}B\r`);
     };
 
     results = await Promise.all(
-      hosts.map(async (host, i) => {
-        const result = await checkOne(host, timeoutMs);
+      hosts.map(async (input, i) => {
+        const result = await checkOne(input, timeoutMs);
         updateRow(i, resultText(result));
         return result;
       }),
@@ -136,11 +140,11 @@ export async function batch(
   } else {
     // Non-TTY (CI / pipes): single spinner, print table after all done
     const spinner = ora(`Checking ${hosts.length} domains...`).start();
-    results = await Promise.all(hosts.map((host) => checkOne(host, timeoutMs)));
+    results = await Promise.all(hosts.map((input) => checkOne(input, timeoutMs)));
     spinner.stop();
 
     for (const [i, r] of results.entries()) {
-      const label = hosts.at(i) ?? '';
+      const label = labels.at(i) ?? '';
       console.log(`  ${label.padEnd(maxLen + 3)}${resultText(r)}`);
     }
   }

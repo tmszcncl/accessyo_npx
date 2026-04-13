@@ -19,12 +19,13 @@ const KEY_HEADERS = [
 ];
 
 export async function checkHttp(
-  host: string,
+  target: string,
+  hostForWww: string,
   aRecords: string[] = [],
   aaaaRecords: string[] = [],
   timeoutMs = TIMEOUT_MS,
 ): Promise<HttpResult> {
-  const url = host.startsWith('http') ? host : `https://${host}`;
+  const url = target.startsWith('http') ? target : `https://${target}`;
   const start = Date.now();
   const main = await followRedirects(url, [], start, ACCESSYO_UA, timeoutMs);
 
@@ -43,7 +44,7 @@ export async function checkHttp(
       ? quickCheck(url, { family: 6, userAgent: ACCESSYO_UA, timeoutMs })
       : Promise.resolve(undefined),
     followRedirects(url, [], Date.now(), BROWSER_UA, timeoutMs),
-    checkWwwRedirect(host, main.redirects),
+    checkWwwRedirect(hostForWww, main.redirects),
   ]);
 
   // Only flag as "differs" when the browser request gets a hard failure (4xx/5xx)

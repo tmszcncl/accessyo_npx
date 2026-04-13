@@ -37,6 +37,7 @@ Accessyo does.
 The CLI is in active development. Currently supports:
 
 - Network context (location/ISP/ASN + public IP; masked by default, full with `--debug`)
+- Flexible target parsing (`domain`, `domain:port`, `http/https URL`, URL with custom port/path)
 - DNS resolution (A, AAAA, CNAME records, TTL, resolver, split-horizon check vs 1.1.1.1)
 - TCP connectivity check
 - TLS handshake (protocol, cipher, certificate info + expiry, hostname match, HTTP/2 via ALPN)
@@ -69,7 +70,25 @@ npx accessyo example.com api.example.com cdn.example.com
 npx accessyo example.com --json
 npx accessyo example.com --debug
 npx accessyo example.com --timeout 3000
+npx accessyo https://api.google.com:8443/v1
+npx accessyo localhost:3000
 ```
+
+## Supported input formats
+
+Accessyo accepts:
+
+- `google.com`
+- `google.com:8443`
+- `http://google.com`
+- `https://google.com`
+- `https://api.google.com:8443/v1`
+- `localhost:3000`
+
+Each input is normalized to `host:port` and all checks use parsed values.
+
+- Example: `https://api.google.com:8443/v1` -> `api.google.com:8443`
+- For URL input, CLI also shows: `→ parsed from: <original URL>`
 
 ## How diagnosis works
 

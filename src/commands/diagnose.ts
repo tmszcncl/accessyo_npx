@@ -7,6 +7,7 @@ import { checkHttp } from '../checks/http.js';
 import { getNetworkContext, maskPublicIp } from '../checks/network-context.js';
 import { buildSummary } from '../summary.js';
 import { buildJsonOutput } from './json-output.js';
+import { parseTarget, type ParsedTarget } from '../target.js';
 import type { DnsResult, TcpResult, TlsResult, HttpResult, NetworkContext } from '../types.js';
 
 interface RenderOptions {
@@ -15,19 +16,17 @@ interface RenderOptions {
 }
 
 export async function diagnose(
-  host: string,
+  input: string,
   port = 443,
   timeoutMs = 5000,
   json = false,
   debug = false,
 ): Promise<boolean> {
+  const target = parseTarget(input, port);
+
   if (json) {
-    const dns = await checkDns(host, timeoutMs);
-    const tcp = dns.ok ? await checkTcp(host, port, timeoutMs) : null;
-    const tls = tcp?.ok ? await checkTls(host, port, timeoutMs) : null;
-    const http =
-      (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs) : null;
-    const output = buildJsonOutput(host, dns, tcp, tls, http);
+    const { dns, tcp, tls, http } = await runChecksForTarget(target, timeoutMs);
+    const output = buildJsonOutput(target.normalizedTarget, dns, tcp, tls, http);
     console.log(JSON.stringify(output, null, 2));
     return output.summary.ok;
   }
@@ -40,38 +39,42 @@ export async function diagnose(
 
   printNetworkContext(ctx, debug);
 
-  return diagnoseHost(host, port, undefined, timeoutMs, debug);
+  return diagnoseHost(input, port, undefined, timeoutMs, debug);
 }
 
 export async function diagnoseHost(
-  host: string,
+  input: string,
   port = 443,
   displayHosts?: string[],
   timeoutMs = 5000,
   debug = false,
 ): Promise<boolean> {
+  const target = parseTarget(input, port);
   const render: RenderOptions = {
     debug,
     hideTiming: displayHosts !== undefined,
   };
   let header: string;
   if (!displayHosts) {
-    header = host;
+    header = target.normalizedTarget;
   } else if (displayHosts.length <= 3) {
-    header = displayHosts.join(', ');
+    header = displayHosts.map((value) => parseTarget(value, port).normalizedTarget).join(', ');
   } else {
-    header = displayHosts.slice(0, 3).join(', ') + chalk.dim(` (+${displayHosts.length - 3} more)`);
+    header =
+      displayHosts
+        .slice(0, 3)
+        .map((value) => parseTarget(value, port).normalizedTarget)
+        .join(', ') + chalk.dim(` (+${displayHosts.length - 3} more)`);
   }
   console.log(`  ${chalk.bold(header)}`);
+  if (!displayHosts && target.parsedFrom) {
+    console.log(`  ${chalk.dim('→')} ${chalk.dim(`parsed from: ${target.parsedFrom}`)}`);
+  }
   console.log();
 
   const spinner2 = ora('Running checks...').start();
 
-  const dns = await checkDns(host, timeoutMs);
-  const tcp = dns.ok ? await checkTcp(host, port, timeoutMs) : null;
-  const tls = tcp?.ok ? await checkTls(host, port, timeoutMs) : null;
-  const http =
-    (tls?.ok ?? tcp?.ok) ? await checkHttp(host, dns.aRecords, dns.aaaaRecords, timeoutMs) : null;
+  const { dns, tcp, tls, http } = await runChecksForTarget(target, timeoutMs);
 
   spinner2.stop();
 
@@ -87,6 +90,25 @@ export async function diagnoseHost(
   console.log();
 
   return buildSummary({ dns, tcp, tls, http }).allOk;
+}
+
+async function runChecksForTarget(
+  target: ParsedTarget,
+  timeoutMs: number,
+): Promise<{
+  dns: DnsResult;
+  tcp: TcpResult | null;
+  tls: TlsResult | null;
+  http: HttpResult | null;
+}> {
+  const dns = await checkDns(target.host, timeoutMs);
+  const tcp = dns.ok ? await checkTcp(target.host, target.port, timeoutMs) : null;
+  const tls = tcp?.ok ? await checkTls(target.host, target.port, timeoutMs) : null;
+  const http =
+    (tls?.ok ?? tcp?.ok)
+      ? await checkHttp(target.httpTarget, target.host, dns.aRecords, dns.aaaaRecords, timeoutMs)
+      : null;
+  return { dns, tcp, tls, http };
 }
 
 function printNetworkContext(ctx: NetworkContext, debug: boolean): void {
@@ -293,7 +315,7 @@ function redirectStepLabel(rawUrl: string): string {
 export function getVisibleHttpHeaders(
   headers: Record<string, string>,
   debug: boolean,
-): Array<[string, string]> {
+): [string, string][] {
   if (debug) {
     return Object.entries(headers)
       .filter(([key]) => key !== 'strict-transport-security')

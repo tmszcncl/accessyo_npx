@@ -195,7 +195,7 @@ async function markIpApiFailure(): Promise<void> {
 async function clearIpApiFailure(): Promise<void> {
   try {
     const payload = await loadCacheEntry();
-    if (!payload || payload.lastFailureAt === undefined) return;
+    if (payload?.lastFailureAt === undefined) return;
     payload.lastFailureAt = undefined;
     await saveCacheEntry(payload);
   } catch {
@@ -206,9 +206,9 @@ async function clearIpApiFailure(): Promise<void> {
 async function loadCacheEntry(): Promise<IpApiCacheEntry | undefined> {
   try {
     const raw = await fs.readFile(getCachePath(), 'utf8');
-    const parsed = JSON.parse(raw) as Partial<IpApiCacheEntry>;
+    const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return undefined;
-    return parsed;
+    return parsed as Partial<IpApiCacheEntry>;
   } catch {
     return undefined;
   }

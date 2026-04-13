@@ -136,11 +136,11 @@ function detectCriticalFailure(input: SummaryInput): FailureCause | null {
     };
   }
 
-  if (http === null || !http.ok) {
+  if (!http?.ok) {
     const statusCode = http?.statusCode;
     const blockedBy = http?.blockedBy;
 
-    if (blockedBy ?? (statusCode === 403 || statusCode === 503)) {
+    if (blockedBy || statusCode === 403 || statusCode === 503) {
       return {
         problem: 'Request blocked',
         likelyCause: 'CDN / firewall / WAF is blocking the request',
