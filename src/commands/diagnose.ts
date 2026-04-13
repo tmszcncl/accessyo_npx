@@ -4,7 +4,7 @@ import { checkDns } from '../checks/dns.js';
 import { checkTcp } from '../checks/tcp.js';
 import { checkTls } from '../checks/tls.js';
 import { checkHttp } from '../checks/http.js';
-import { getNetworkContext } from '../checks/network-context.js';
+import { getNetworkContext, maskPublicIp } from '../checks/network-context.js';
 import { buildSummary } from '../summary.js';
 import { buildJsonOutput } from './json-output.js';
 import type { DnsResult, TcpResult, TlsResult, HttpResult, NetworkContext } from '../types.js';
@@ -81,19 +81,28 @@ export async function diagnoseHost(
 
 function printNetworkContext(ctx: NetworkContext): void {
   const line = chalk.dim('─'.repeat(40));
-  console.log(`  ${chalk.bold('Your network:')}`);
+  console.log(`  ${chalk.bold('Network')}`);
   console.log();
 
-  const ip = ctx.publicIp ?? 'unknown';
-  const country = ctx.country ? chalk.dim(` (${ctx.country})`) : '';
-  console.log(`     ${chalk.dim('IP:')}    ${ip}${country}`);
-
-  const resolverLabel = ctx.resolverLabel ? chalk.dim(` (${ctx.resolverLabel})`) : '';
-  console.log(`     ${chalk.dim('DNS:')}   ${ctx.resolverIp}${resolverLabel}`);
+  const location = formatLocation(ctx.countryName, ctx.country);
+  if (location) printNetworkRow('Location', location);
+  if (ctx.isp) printNetworkRow('ISP', ctx.isp);
+  if (ctx.asn) printNetworkRow('ASN', ctx.asn);
+  if (ctx.publicIp) printNetworkRow('IP', maskPublicIp(ctx.publicIp));
 
   console.log();
   console.log(line);
   console.log();
+}
+
+function printNetworkRow(label: string, value: string): void {
+  const key = `${label}:`.padEnd(10, ' ');
+  console.log(`  ${chalk.dim(key)} ${value}`);
+}
+
+function formatLocation(countryName: string | undefined, countryCode: string | undefined): string | undefined {
+  if (countryName && countryCode) return `${countryName} (${countryCode})`;
+  return countryName ?? countryCode;
 }
 
 function printDns(result: DnsResult, hideTiming = false): void {
@@ -375,20 +384,12 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
     console.log(`     ${chalk.dim('→')} served via ${result.cdn} ${chalk.dim('(CDN edge)')}`);
   }
 
-  if (result.ipv4?.ok && result.ipv6?.ok) {
-    console.log(`     ${chalk.dim('→')} both IPv4 and IPv6 working`);
-  } else if (result.ipv4?.ok && result.ipv6 !== undefined && !result.ipv6.ok) {
-    console.log(`     ${chalk.yellow('→')} IPv6 connectivity issue (may affect some users)`);
-  }
-
-  if (result.browserDiffers === true) {
-    console.log(
-      `     ${chalk.yellow('→')} server responds differently to browsers (status: ${result.browserStatusCode ?? '?'} vs ${status})`,
-    );
-  }
-
-  if (result.durationMs > 2000) {
-    console.log(`     ${chalk.yellow('→')} slow response (${result.durationMs}ms)`);
+  const clientVarianceInfo = getClientVarianceInfo(result);
+  if (clientVarianceInfo) {
+    console.log(`     ${chalk.cyan('ℹ')} ${clientVarianceInfo.title}`);
+    for (const detail of clientVarianceInfo.details) {
+      console.log(`       ${chalk.dim('→')} ${detail}`);
+    }
   }
 
   if (result.wwwCheck) {
@@ -407,9 +408,19 @@ function printHttp(result: HttpResult | null, hideTiming = false): void {
   }
 }
 
+export function getClientVarianceInfo(
+  result: HttpResult,
+): { title: string; details: string[] } | null {
+  if (result.browserDiffers !== true) return null;
+  return {
+    title: 'response varies by client',
+    details: ['server may treat CLI and browsers differently'],
+  };
+}
+
 function printSummary(input: Parameters<typeof buildSummary>[0]): void {
   const s = buildSummary(input);
-  const line = chalk.dim('─'.repeat(40));
+  const separator = chalk.dim('─'.repeat(40));
 
   const row = (label: string, ok: boolean | null, extra = '') => {
     const icon = ok === null ? chalk.dim('–') : ok ? chalk.green('✓') : chalk.red('✗');
@@ -418,7 +429,7 @@ function printSummary(input: Parameters<typeof buildSummary>[0]): void {
     console.log(`  ${label.padEnd(6)} ${icon} ${text}${suffix}`);
   };
 
-  console.log(line);
+  console.log(separator);
   console.log();
   row('DNS', input.dns.ok, `${input.dns.durationMs}ms`);
   row(
@@ -448,31 +459,34 @@ function printSummary(input: Parameters<typeof buildSummary>[0]): void {
   console.log(`  ${'Total'.padEnd(6)} ${chalk.dim(`${total}ms`)}`);
   console.log();
 
-  if (s.allOk) {
+  if (s.status === 'WORKING') {
     console.log(`  ${chalk.green('STATUS:')} ${chalk.green('✓ WORKING')}`);
-    console.log();
-    console.log(`  ${chalk.dim('→')} all checks passed`);
+  } else if (s.status === 'DEGRADED') {
+    console.log(`  ${chalk.yellow('STATUS:')} ${chalk.yellow('⚠ DEGRADED')}`);
   } else {
-    console.log(`  ${chalk.red('STATUS:')} ${chalk.red('✗ NOT WORKING')}`);
+    console.log(`  ${chalk.red('STATUS:')} ${chalk.red('✗ FAIL')}`);
+  }
+
+  console.log();
+  const explanationColor =
+    s.status === 'FAIL' ? chalk.red : s.status === 'DEGRADED' ? chalk.yellow : chalk.dim;
+  console.log(`  ${explanationColor('→')} ${s.explanation}`);
+
+  if (s.warnings.length > 0) {
     console.log();
-    if (s.problem) {
-      console.log(`  ${chalk.bold.red('ROOT CAUSE:')}`);
-      console.log(`  ${chalk.red('→')} ${s.problem}`);
+    console.log(`  ${chalk.bold('Warnings')}`);
+    console.log();
+    for (const warning of s.warnings) {
+      const icon = warning.level === 'info' ? chalk.cyan('ℹ') : chalk.yellow('⚠');
+      console.log(`  ${icon} ${warning.title}`);
       console.log();
-    }
-    if (s.likelyCause) {
-      console.log(`  ${chalk.bold('Likely cause:')}`);
-      console.log(`  ${chalk.dim('→')} ${s.likelyCause}`);
-      console.log();
-    }
-    if (s.whatYouCanDo.length > 0) {
-      console.log(`  ${chalk.bold('What you can do:')}`);
-      for (const tip of s.whatYouCanDo) {
-        console.log(`  ${chalk.dim('→')} ${tip}`);
+      for (const impactLine of warning.impact) {
+        console.log(`    ${chalk.dim('→')} ${impactLine}`);
       }
+      console.log();
     }
   }
 
   console.log();
-  console.log(line);
+  console.log(separator);
 }

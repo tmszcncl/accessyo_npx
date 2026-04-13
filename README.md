@@ -9,6 +9,7 @@
 
 🌐 [accessyo.com](https://accessyo.com)
 📦 [GitHub repository](https://github.com/tmszcncl/accessyo_npx)
+🐹 [Go CLI variant](https://github.com/tmszcncl/accessyo_go)
 
 ---
 
@@ -35,7 +36,7 @@ Accessyo does.
 
 The CLI is in active development. Currently supports:
 
-- Network context (public IP, country, DNS resolver)
+- Network context (public IP + location/ISP/ASN from ipapi with 1h cache, 5m failure backoff, DNS resolver)
 - DNS resolution (A, AAAA, CNAME records, TTL, resolver, split-horizon check vs 1.1.1.1)
 - TCP connectivity check
 - TLS handshake (protocol, cipher, certificate info + expiry, hostname match, HTTP/2 via ALPN)

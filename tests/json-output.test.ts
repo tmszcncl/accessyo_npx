@@ -28,8 +28,11 @@ const baseHttp: HttpResult = {
   ok: true,
   durationMs: 150,
   statusCode: 200,
+  ttfb: 200,
   redirects: [],
   headers: {},
+  ipv4: { ok: true, durationMs: 20 },
+  ipv6: { ok: true, durationMs: 30 },
 };
 
 describe('buildJsonOutput', () => {
@@ -55,14 +58,29 @@ describe('buildJsonOutput', () => {
   it('sets summary ok true when all checks pass', () => {
     const out = buildJsonOutput('example.com', baseDns, baseTcp, baseTls, baseHttp);
     expect(out.summary.ok).toBe(true);
+    expect(out.summary.status).toBe('WORKING');
     expect(out.summary.problem).toBeNull();
+    expect(out.summary.explanation).toMatch(/reachable/i);
   });
 
   it('sets summary ok false and problem when DNS fails', () => {
     const failDns: DnsResult = { ok: false, durationMs: 5, resolver: '8.8.8.8', error: 'NXDOMAIN' };
     const out = buildJsonOutput('bad.example', failDns, null, null, null);
     expect(out.summary.ok).toBe(false);
+    expect(out.summary.status).toBe('FAIL');
     expect(out.summary.problem).not.toBeNull();
+  });
+
+  it('keeps summary ok true and sets DEGRADED for IPv4 instability', () => {
+    const degradedHttp: HttpResult = {
+      ...baseHttp,
+      ipv4: { ok: false, durationMs: 120, error: 'timeout' },
+      ttfb: 1400,
+    };
+    const out = buildJsonOutput('slow.example', baseDns, baseTcp, baseTls, degradedHttp);
+    expect(out.summary.ok).toBe(true);
+    expect(out.summary.status).toBe('DEGRADED');
+    expect(out.summary.warnings.length).toBeGreaterThan(0);
   });
 
   it('handles null tcp/tls/http gracefully', () => {

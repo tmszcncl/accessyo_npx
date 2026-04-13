@@ -1,5 +1,6 @@
 import type { DnsResult, TcpResult, TlsResult, HttpResult } from '../types.js';
 import { buildSummary } from '../summary.js';
+import type { SummaryStatus, SummaryWarning } from '../summary.js';
 
 export interface JsonOutput {
   host: string;
@@ -12,6 +13,9 @@ export interface JsonOutput {
   };
   summary: {
     ok: boolean;
+    status: SummaryStatus;
+    explanation: string;
+    warnings: SummaryWarning[];
     problem: string | null;
     likelyCause: string | null;
     whatYouCanDo: string[];
@@ -36,6 +40,9 @@ export function buildJsonOutput(
     checks: { dns, tcp, tls, http },
     summary: {
       ok: summary.allOk,
+      status: summary.status,
+      explanation: summary.explanation,
+      warnings: summary.warnings,
       problem: summary.problem,
       likelyCause: summary.likelyCause,
       whatYouCanDo: summary.whatYouCanDo,

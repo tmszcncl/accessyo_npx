@@ -1,6 +1,9 @@
 export interface NetworkContext {
   publicIp: string | undefined;
   country: string | undefined;
+  countryName: string | undefined;
+  isp: string | undefined;
+  asn: string | undefined;
   resolverIp: string;
   resolverLabel: string | undefined;
 }
